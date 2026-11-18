@@ -4,9 +4,9 @@
 Papirus draws its default (blue) folders with two blues and a dark navy glyph.
 For every folder-like icon (folders, special folders, user home, the folder
 mimetype) that resolves to a blue Papirus file, this writes a recoloured copy;
-everything else is inherited unchanged from Papirus-Dark / Papirus-Light.
+everything else is inherited unchanged from Papirus-Dark.
 
-Output: build/Frost (dark, inherits Papirus-Dark) and build/Frost-Light.
+Output: build/Frost (inherits Papirus-Dark).
 """
 import configparser, os, re, shutil
 from pathlib import Path
@@ -23,7 +23,7 @@ CONTEXTS = ("places", "mimetypes")
 # Only icons that are named as folders. Generic names like "network" or "desktop"
 # must stay Papirus: Plasma falls back to them for e.g. "network-wireless".
 FOLDER_NAMES = re.compile(r"^(folder|user-|inode-directory|gtk-directory|stock_folder|stock_open|insync-folder|gnome-home)")
-THEMES = {"Frost": ("Papirus-Dark", "breeze-dark"), "Frost-Light": ("Papirus-Light", "breeze")}
+THEMES = {"Frost": ("Papirus-Dark", "breeze-dark")}
 
 
 def recolour(text):

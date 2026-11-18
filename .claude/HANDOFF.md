@@ -124,3 +124,9 @@ Backups of the panel config (appletsrc + plasmashellrc) in `~/.local/share/glass
   solid file views (`transparent_dolphin_view=false`, opaque base colour); light Global Theme preview
   (`previews/light`). Automatic day/night is ON (`daynight.sh on`, frost-daynight.timer every 10 min).
   Possible follow-up: Kvantum light's focus frame is still Mojave blue (seen around Dolphin's current row).
+- 2026-11-19 ~01:35: **Light theme deleted at the user's request ("dark 24x7, light attracts bugs").**
+  Removed: Light palette in build.py, FrostLight colours / Kvantum / Aurorae, org.frost.light global
+  theme, Frost-Light icons, previews/light, daynight.sh and its systemd timer (files removed from
+  ~/.config/systemd/user), install.sh's light option, light branches in widgets (Style.qml is dark-only).
+  Don't reintroduce light mode or day/night switching. Older notes above that mention light mode,
+  daynight.sh or Frost-Light are history only.

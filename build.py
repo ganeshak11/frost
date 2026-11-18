@@ -21,14 +21,6 @@ PAL = {
         neg=(255, 92, 92), neu=(255, 176, 46), pos=(52, 199, 89),
         icons="Frost", kv="KvMojave",
     ),
-    "Light": dict(
-        window=(236, 236, 241), view=(255, 255, 255), alt=(245, 245, 248), button=(255, 255, 255),
-        header=(230, 230, 236), tooltip=(250, 250, 252), comp=(30, 31, 36),
-        text=(29, 29, 31), dim=(112, 112, 122), accent=(10, 112, 240),
-        link=(10, 102, 220), visited=(130, 70, 200),
-        neg=(220, 50, 50), neu=(210, 130, 0), pos=(30, 150, 60),
-        icons="Frost-Light", kv="KvMojaveLight",
-    ),
 }
 
 c = lambda t: ",".join(map(str, t))
@@ -220,7 +212,7 @@ def panel_svg():
             ww, hh = (0.01, m) if side in ("top", "bottom") else (m, 0.01)
             out.append(f'<rect id="{pre}hint-{side}-margin" x="{ox + i * 2}" y="60" width="{ww or 0.01}" height="{hh or 0.01}" fill="none"/>')
 
-    # the dock's glass follows the colour scheme: dark glass under Frost Dark, light under Frost Light
+    # the dock's glass follows the colour scheme (Frost Dark)
     glass = 'class="ColorScheme-Background" fill="currentColor" fill-opacity="0.55"'
     rim = 'class="ColorScheme-Text" fill="currentColor" opacity="0.13"'      # element opacity: stays faint when opaque
     nine("", 0, 4, 2, None)                                   # transparent
@@ -419,7 +411,7 @@ def kvantum(name, p, base: Path):
     cfg = (src / f"{p['kv']}.kvconfig").read_text()
     sets = {
         "translucent_windows": "true", "blurring": "true", "popup_blurring": "true",
-        "reduce_window_opacity": "30" if name == "Dark" else "8",
+        "reduce_window_opacity": "30",
         "reduce_menu_opacity": "30", "menu_blur_radius": "6", "tooltip_blur_radius": "6",
         "menu_shadow_depth": "6", "tooltip_shadow_depth": "4", "animate_states": "false",
         "opaque": "kaffeine,kmplayer,subtitlecomposer,kdenlive,vlc,smplayer,smplayer2,avidemux,avidemux2_qt4,"
@@ -433,9 +425,7 @@ def kvantum(name, p, base: Path):
             cfg = cfg.replace("[%General]\n", f"[%General]\n{k}={v}\n", 1)
     colors = {
         "window.color": hx(p["window"]), "inactive.window.color": hx(p["window"]),
-        # light mode: solid file/list views, otherwise dark windows behind show through
-        "base.color": hx(p["view"], 0xdd if name == "Dark" else 0xff),
-        "inactive.base.color": hx(p["view"], 0xdd if name == "Dark" else 0xff),
+        "base.color": hx(p["view"], 0xdd), "inactive.base.color": hx(p["view"], 0xdd),
         "alt.base.color": hx(p["alt"]), "inactive.alt.base.color": hx(p["alt"]),
         "button.color": hx(p["button"]), "tooltip.base.color": hx(p["tooltip"]),
         "highlight.color": hx(p["accent"]), "inactive.highlight.color": hx(mix(p["accent"], p["window"], .35)),
@@ -447,8 +437,6 @@ def kvantum(name, p, base: Path):
     }
     for k, v in colors.items():
         cfg = re.sub(rf"^{re.escape(k)}=.*$", f"{k}={v}", cfg, flags=re.M)
-    if name == "Light":
-        cfg = re.sub(r"^transparent_dolphin_view=.*$", "transparent_dolphin_view=false", cfg, flags=re.M)
     cfg = re.sub(r"^comment=.*$", f"comment=Frost {name}: translucent, blurred, based on {p['kv']} by Tsu Jan", cfg, flags=re.M)
     write(base / f"Frost{name}.kvconfig", cfg)
     shutil.copy(src / f"{p['kv']}.svg", base / f"Frost{name}.svg")

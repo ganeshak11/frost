@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# Frost installer.  Usage:  ./install.sh [dark|light]
+# Frost installer (dark only).  Usage:  ./install.sh
 # Backs up your current look first; ./revert.sh puts it back.
 set -euo pipefail
-MODE=${1:-dark}
-case "$MODE" in dark) V=Dark ;; light) V=Light ;; *) echo "usage: $0 [dark|light]"; exit 1 ;; esac
-ICONS=Frost; [ "$V" = Light ] && ICONS=Frost-Light
+MODE=dark; V=Dark; ICONS=Frost
 HERE=$(cd "$(dirname "$0")" && pwd)
 DATA=~/.local/share; CFG=~/.config; STATE=$DATA/glass-theme
 kw() { kwriteconfig6 --file "$1" --group "$2" --key "$3" "$4"; }

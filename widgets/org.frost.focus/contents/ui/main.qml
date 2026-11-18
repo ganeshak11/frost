@@ -117,17 +117,16 @@ PlasmoidItem {
                 Canvas {
                     id: ring
                     anchors.fill: parent
-                    Connections { target: st; function onLightChanged() { ring.requestPaint() } }
                     property real progress: root.total > 0 ? 1 - root.remaining / root.total : 0
                     onProgressChanged: requestPaint()
                     onPaint: {
                         const c = getContext("2d"); c.reset()
                         const r = width / 2 - 5, cx = width / 2, cy = height / 2
                         c.lineWidth = 5; c.lineCap = "round"
-                        c.strokeStyle = st.light ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.08)"
+                        c.strokeStyle = "rgba(255,255,255,0.08)"
                         c.beginPath(); c.arc(cx, cy, r, 0, 2 * Math.PI); c.stroke()
                         if (progress > 0) {
-                            c.strokeStyle = root.isFocus ? "#F21D43" : st.light ? "rgba(29,29,34,0.85)" : "rgba(242,242,245,0.85)"
+                            c.strokeStyle = root.isFocus ? "#F21D43" : "rgba(242,242,245,0.85)"
                             c.beginPath(); c.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + progress * 2 * Math.PI); c.stroke()
                         }
                     }

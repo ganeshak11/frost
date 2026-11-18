@@ -32,7 +32,7 @@ PlasmoidItem {
 
     Style { id: rs }                     // the card's colours, for untagged events
     readonly property var kinds: [
-        { kind: "", label: "No tag", color: rs.light ? "#5f5f6b" : "#cfcfd6" },
+        { kind: "", label: "No tag", color: "#cfcfd6" },
         { kind: "birthday", label: "Birthday", color: "#f472b6" },
         { kind: "anniversary", label: "Anniversary", color: "#a78bfa" },
         { kind: "important", label: "Important", color: "#F21D43" }

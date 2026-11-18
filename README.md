@@ -1,14 +1,14 @@
 # Frost
 
-A light, glassmorphic look for KDE Plasma 6 (Wayland), plus **Obsidian Glass**:
+A dark-only, glassmorphic look for KDE Plasma 6 (Wayland), plus **Obsidian Glass**:
 a set of native Plasma desktop widgets, a Mac-style dock and a Dynamic Island.
 
 ## What's here
 
 | Path | What it does |
 |---|---|
-| `build.py` | Generates the theme: Frost Dark/Light colour schemes (red accent `#F21D43`), the glass Plasma theme (including the dock's glass bar, drawn by the bottom panel), Kvantum app styles, window decorations and global themes, into `build/` |
-| `install.sh [dark\|light]` | Builds and applies the theme for your user (fonts, effects, panels). Backs up your previous look the first time |
+| `build.py` | Generates the theme: the Frost Dark colour scheme (red accent `#F21D43`), the glass Plasma theme (including the dock's glass bar, drawn by the bottom panel), Kvantum app styles, window decorations and global themes, into `build/` |
+| `install.sh` | Builds and applies the theme for your user (fonts, effects, panels). Backs up your previous look the first time |
 | `revert.sh` | Restores the look you had before Frost |
 | `system-install.sh` | **sudo.** Installs Rufscript / Inter / JetBrains Mono and the Frost login screen (SDDM). `--undo` removes the login theme |
 | `sddm/frost/` | The login screen theme |
@@ -20,7 +20,7 @@ a set of native Plasma desktop widgets, a Mac-style dock and a Dynamic Island.
 | `extras/firefox/` | `userChrome.css` / `userContent.css` + `user.js` for the Firefox profile |
 | `extras/system-boot.sh` | **sudo.** Plymouth boot splash and GRUB menu theme (`plymouth/`, `grub/`). `--undo` restores the previous ones |
 | `extras/cursors/` | Frost cursor theme: `build_cursors.py` draws 23 cursors (dark body, white outline, red badges, animated red spinner) as Plasma SVG cursors + Xcursor files with 81 alias names, inheriting Breeze for the rest. `install.sh` installs to `~/.icons/Frost-cursors` and applies it; `--revert` goes back |
-| `extras/icons/` | Frost icon themes: `build_icons.py` makes Frost (dark) and Frost-Light from Papirus with ~1,400 folder icons recoloured to the Frost red; everything else is inherited from Papirus. `install.sh` installs them (also run by the main `install.sh`) |
+| `extras/icons/` | Frost icon theme: `build_icons.py` makes Frost from Papirus-Dark with ~1,400 folder icons recoloured to the Frost red; everything else is inherited from Papirus. `install.sh` installs it (also run by the main `install.sh`) |
 | `previews/` | Screenshots used as the Global Theme previews in System Settings |
 
 ## Dock and Dynamic Island
