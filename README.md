@@ -38,7 +38,7 @@ a set of native Plasma desktop widgets, a Mac-style dock and a Dynamic Island.
 - **Weather Intelligence**: Open-Meteo, no account. City in the widget settings.
 - **Device Ecosystem**: laptop network, KDE Connect phone (battery, ring, send file), Tailscale peers.
 - **Focus**: Pomodoro with your own projects (click the project name to add, pick or remove), daily stats, optional Do Not Disturb.
-- **Calendar & Agenda**: Monday-first, holidays, local events, iCal feeds (Google "secret address") in the widget settings.
+- **Calendar & Agenda**: Monday-first month grid with a coloured dot per kind of event, and what's coming up. Click a day, press **+** and type `09:30 Gym`, `Gym`, or `05/03/2004 Mom's bday` (another date, e.g. a birth date, so ages are counted). Pick Once / Weekly / Monthly / Yearly and a colour (birthday pink, anniversary purple, important red); "bday" / "anniversary" pick yearly and the colour for you. Right-click one of your events to delete it. Feeds in the widget settings, one per line: `link #colour Name +Word`: Indian holidays, Real Madrid fixtures (gold) and F1 races, qualifying and sprints (orange) by default; add your Google Calendar's secret iCal address. Reminders appear in the Dynamic Island 10 minutes before and at the start of timed events, at 9:00 for all-day ones (switch off in the settings).
 - **Quick Controls**: volume / mic / brightness sliders and pills for Wi-Fi, Bluetooth, Tailscale, DND, Night Light, Power.
 - **Music**: artwork (thumbnail only for videos), live beat bars from `cava` (`code/beats.py`, local only, stops when idle), progress and controls. Appears only while something plays, hides 30 s after pausing.
 

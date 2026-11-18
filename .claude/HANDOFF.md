@@ -32,6 +32,15 @@ re-apply bars + desktop layout with `./desktop.sh` (restarts plasmashell once).
 Backups of the panel config (appletsrc + plasmashellrc) in `~/.local/share/glass-theme/`:
 `backup-panels-20261118-223443` (before this task), plus one per `desktop.sh` run.
 
+- Calendar card (org.frost.agenda), 2026-11-19: repeating local events (weekly / monthly / yearly,
+  `id` per event, ages / years for yearly ones), tags with colours (birthday #f472b6, anniversary
+  #a78bfa, important #F21D43), a "dd/mm/yyyy" or "yyyy-mm-dd" prefix for another date, feed lines
+  `link #colour Name +Word` (default feeds: Indian holidays, ics.fixtur.es Real Madrid, Better F1
+  Calendar filtered to races / qualifying / sprints), reminders sent with notify-send (so the island
+  shows them; sent ids kept in config `reminded`). Logic unit-tested with Node (extracting the JS
+  functions from main.qml); the add-event chips and a live reminder were not clicked/seen yet.
+  The user still has to add their own birthday and another person's (they'll do it in the card).
+
 ## Not verified yet (needs the user's hands or the right moment)
 - Dock feel: magnification (1.3, computed from resting positions so it no longer wobbles), drag to
   reorder, right-click menu, the clipboard icon's popup. Meta+V by key press (the action was tested).
@@ -40,6 +49,8 @@ Backups of the panel config (appletsrc + plasmashellrc) in `~/.local/share/glass
   Pause / Cancel on a real transfer, charger / low battery / Bluetooth / DND banners.
 
 ## Possible follow-ups
+- Calendar feeds with TZID times (Google calendars) are read as local time, and RRULE repeats in feeds
+  are ignored (only the first date shows). The current feeds use UTC times, so they're right.
 - Volume / brightness changes as island HUD banners (replacing Plasma's OSD).
 - "toggle do not disturb" global shortcut belonged to the removed tray bell; it no longer works.
 - `[Containments][8]` in appletsrc is an orphaned Plasma 5 systray containment (unused; harmless).

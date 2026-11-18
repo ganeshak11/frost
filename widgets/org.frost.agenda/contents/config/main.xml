@@ -3,6 +3,8 @@
   <kcfgfile name=""/>
   <group name="General">
     <entry name="events" type="String"><default>[]</default></entry>
-    <entry name="feeds" type="String"><default>https://calendar.google.com/calendar/ical/en.indian%23holiday%40group.v.calendar.google.com/public/basic.ics</default></entry>
+    <entry name="reminders" type="Bool"><default>true</default></entry>
+    <entry name="reminded" type="String"><default>[]</default></entry>
+    <entry name="feeds" type="String"><default>https://calendar.google.com/calendar/ical/en.indian%23holiday%40group.v.calendar.google.com/public/basic.ics&#10;https://ics.fixtur.es/v2/real-madrid.ics #facc15 Real Madrid&#10;https://better-f1-calendar.vercel.app/api/calendar.ics #fb923c F1 +Race +Qualifying +Sprint</default></entry>
   </group>
 </kcfg>

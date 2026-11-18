@@ -1,14 +1,21 @@
-// Calendar & Agenda: Monday-first month grid (today in red, dots on days with
-// events, holidays in red text) and an agenda below that grows with what's
-// coming up. Click a day to see its events; "+" adds an event to the selected
-// day ("09:30 Gym" or just "Gym"); right-click one of your events to delete it.
-// Calendar feeds (Google "secret iCal address", holiday calendars) are set in
-// the widget settings and refreshed every 30 minutes.
+// Calendar & Agenda: Monday-first month grid (today in red, coloured dots on
+// days with events, holidays in red text) and an agenda below that grows with
+// what's coming up. Click a day to see its events; "+" adds an event to the
+// selected day ("09:30 Gym", "Gym", or "05/03/2004 Mom's birthday" for another
+// date), once or repeating weekly / monthly / yearly, tagged birthday /
+// anniversary / important (each has its own colour). Right-click one of your
+// events to delete it (a repeating one goes with all its dates).
+// Calendar feeds (Google "secret iCal address", holidays, fixtures) are set in
+// the widget settings, one per line: "<link> [#colour] [Name] [+Word ...]";
+// +Words keep only events whose title contains one of them. Refreshed every
+// 30 minutes. Reminders go out as notifications (shown by the Dynamic Island):
+// 10 minutes before and at the start of timed events, at 9:00 for all-day ones.
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
+import org.kde.plasma.plasma5support as P5Support
 import org.kde.kirigami as Kirigami
 
 PlasmoidItem {
@@ -19,20 +26,86 @@ PlasmoidItem {
     property date today: new Date()
     property date shown: new Date(today.getFullYear(), today.getMonth(), 1)
     property date selected: today
-    property var feedEvents: []          // [{date:"2026-11-18", time:"09:30", title, holiday}]
+    property var feedEvents: []          // [{date:"2026-11-18", time:"09:30", title, holiday, color, source}]
+    // your own events: {id, date, time, title, repeat: ""|weekly|monthly|yearly, kind: ""|birthday|anniversary|important}
     readonly property var localEvents: { try { return JSON.parse(Plasmoid.configuration.events) } catch (e) { return [] } }
-    readonly property var allEvents: localEvents.map(e => Object.assign({ local: true }, e)).concat(feedEvents)
+
+    readonly property var kinds: [
+        { kind: "", label: "No tag", color: "#cfcfd6" },
+        { kind: "birthday", label: "Birthday", color: "#f472b6" },
+        { kind: "anniversary", label: "Anniversary", color: "#a78bfa" },
+        { kind: "important", label: "Important", color: "#F21D43" }
+    ]
+    function kindColor(k) { const m = kinds.find(x => x.kind === (k || "")); return m ? m.color : kinds[0].color }
+    function colorOf(e) { return e.holiday ? "#F21D43" : e.color || kindColor(e.kind) }
 
     function key(d) { return Qt.formatDate(d, "yyyy-MM-dd") }
-    function eventsOn(k) { return allEvents.filter(e => e.date === k).sort((a, b) => (a.time || "").localeCompare(b.time || "")) }
+    function dayOf(k) { return new Date(k + "T00:00") }
+
+    // does a (possibly repeating) local event fall on day d?
+    function occursOn(e, d) {
+        const k = key(d)
+        if (!e.repeat) return e.date === k
+        if (k < e.date) return false
+        const s = dayOf(e.date)
+        if (e.repeat === "weekly") return d.getDay() === s.getDay()
+        const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+        const day = Math.min(s.getDate(), last)            // 31st -> last day; 29 Feb -> 28 Feb
+        if (e.repeat === "monthly") return d.getDate() === day
+        if (e.repeat === "yearly") return d.getMonth() === s.getMonth() && d.getDate() === day
+        return false
+    }
+    // one dated copy of a local event; yearly ones know how many years it's been
+    function occurrence(e, d) {
+        const years = e.repeat === "yearly" ? d.getFullYear() - dayOf(e.date).getFullYear() : 0
+        return Object.assign({ local: true, source: "Calendar", years: years }, e, { date: key(d), origDate: e.date })
+    }
+    function eventsOn(k) {
+        const d = dayOf(k)
+        return localEvents.filter(e => occursOn(e, d)).map(e => occurrence(e, d))
+            .concat(feedEvents.filter(e => e.date === k))
+            .sort((a, b) => (a.time || "").localeCompare(b.time || ""))
+    }
+    function nextOccurrence(e, from) {
+        if (!e.repeat) return e.date >= key(from) ? occurrence(e, dayOf(e.date)) : null
+        for (let i = 0; i < 400; i++) {
+            const d = new Date(from.getFullYear(), from.getMonth(), from.getDate() + i)
+            if (occursOn(e, d)) return occurrence(e, d)
+        }
+        return null
+    }
     readonly property var upcoming: {
         const t = key(today)
-        return allEvents.filter(e => e.date >= t && !e.holiday).sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || ""))).slice(0, 4)
+        return localEvents.map(e => nextOccurrence(e, today)).filter(e => e)
+            .concat(feedEvents.filter(e => e.date >= t && !e.holiday))
+            .sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")))
     }
     readonly property var agenda: key(selected) === key(today) ? upcoming : eventsOn(key(selected))
 
+    function titleOf(e) {
+        if (!(e.years > 0)) return e.title
+        return e.title + (e.kind === "birthday" ? "  ·  turns " + e.years : "  ·  " + e.years + (e.years === 1 ? " year" : " years"))
+    }
+
+    // ---- adding and removing your events --------------------------------------
+    property string newRepeat: ""
+    property string newKind: ""
+    property bool pickedByHand: false
+    function guess(text) {        // "bday" / "birthday" / "anniversary" set repeat and tag for you
+        if (pickedByHand) return
+        if (/b'?day|birthday/i.test(text)) { newRepeat = "yearly"; newKind = "birthday" }
+        else if (/anniversary/i.test(text)) { newRepeat = "yearly"; newKind = "anniversary" }
+        else { newRepeat = ""; newKind = "" }
+    }
     function addEvent(text) {
-        const m = text.trim().match(/^(\d{1,2}[:.]\d{2}\s*(?:am|pm)?)?\s*(.+)$/i)
+        let s = text.trim(), date = key(selected)
+        let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})\s+/) || s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})\s+/)
+        if (m) {
+            const [y, mo, d] = m[1].length === 4 ? [+m[1], +m[2], +m[3]] : [+m[3], +m[2], +m[1]]   // ISO, or day/month/year
+            const dt = new Date(y, mo - 1, d)
+            if (dt.getMonth() === mo - 1) { date = key(dt); s = s.slice(m[0].length) }
+        }
+        m = s.match(/^(\d{1,2}[:.]\d{2}\s*(?:am|pm)?)?\s*(.+)$/i)
         if (!m || !m[2]) return
         let time = ""
         if (m[1]) {
@@ -41,10 +114,13 @@ PlasmoidItem {
             if (/am/i.test(m[1]) && h === 12) h = 0
             time = String(h).padStart(2, "0") + ":" + String(mi).padStart(2, "0")
         }
-        Plasmoid.configuration.events = JSON.stringify(localEvents.concat([{ date: key(selected), time: time, title: m[2] }]))
+        const ev = { id: Date.now().toString(36), date: date, time: time, title: m[2], repeat: newRepeat, kind: newKind }
+        Plasmoid.configuration.events = JSON.stringify(localEvents.concat([ev]))
     }
     function removeEvent(ev) {
-        Plasmoid.configuration.events = JSON.stringify(localEvents.filter(e => !(e.date === ev.date && e.time === ev.time && e.title === ev.title)))
+        const date = ev.origDate || ev.date
+        Plasmoid.configuration.events = JSON.stringify(localEvents.filter(e =>
+            ev.id ? e.id !== ev.id : !(e.date === date && e.time === ev.time && e.title === ev.title)))
     }
     function fmtTime(t) {
         if (!t) return "All day"
@@ -53,7 +129,22 @@ PlasmoidItem {
     }
 
     // ---- iCal feeds -------------------------------------------------------
-    function parseIcs(text, holiday) {
+    // one feed per line: "<link> [#rrggbb] [Name words] [+Keep +Words]"
+    function feedList() {
+        const out = []
+        for (const line of Plasmoid.configuration.feeds.split("\n")) {
+            for (const tok of line.trim().split(/\s+/)) {
+                if (/^https?:\/\//.test(tok)) out.push({ url: tok, color: "", name: "", keep: [] })
+                else if (!out.length || !tok) continue
+                else if (/^#[0-9a-f]{6}$/i.test(tok)) out[out.length - 1].color = tok
+                else if (tok.startsWith("+") && tok.length > 1) out[out.length - 1].keep.push(tok.slice(1).toLowerCase())
+                else out[out.length - 1].name += (out[out.length - 1].name ? " " : "") + tok
+            }
+        }
+        return out
+    }
+    function parseIcs(text, feed) {
+        const holiday = /holiday/i.test(decodeURIComponent(feed.url))
         const lines = text.replace(/\r\n[ \t]/g, "").split(/\r?\n/)
         const out = [], lo = new Date(), hi = new Date()
         lo.setMonth(lo.getMonth() - 2); hi.setMonth(hi.getMonth() + 12)
@@ -61,10 +152,12 @@ PlasmoidItem {
         for (const l of lines) {
             if (l === "BEGIN:VEVENT") ev = {}
             else if (l === "END:VEVENT" && ev) {
-                if (ev.start && ev.start >= lo && ev.start <= hi)
-                    out.push({ date: key(ev.start), time: ev.allDay ? "" : Qt.formatTime(ev.start, "HH:mm"), title: ev.title || "(no title)", holiday: holiday })
+                const title = ev.title || "(no title)"
+                if (ev.start && ev.start >= lo && ev.start <= hi && (!feed.keep.length || feed.keep.some(w => title.toLowerCase().includes(w))))
+                    out.push({ date: key(ev.start), time: ev.allDay ? "" : Qt.formatTime(ev.start, "HH:mm"), title: title,
+                               holiday: holiday, color: feed.color, source: feed.name || (holiday ? "Holidays" : "Calendar") })
                 ev = null
-            } else if (ev && l.startsWith("SUMMARY")) ev.title = l.slice(l.indexOf(":") + 1).replace(/\\,/g, ",")
+            } else if (ev && l.startsWith("SUMMARY")) ev.title = l.slice(l.indexOf(":") + 1).replace(/\\([,;\\])/g, "$1")
             else if (ev && l.startsWith("DTSTART")) {
                 const v = l.slice(l.indexOf(":") + 1)
                 const y = +v.slice(0, 4), mo = +v.slice(4, 6) - 1, d = +v.slice(6, 8)
@@ -78,22 +171,50 @@ PlasmoidItem {
         return out
     }
     function syncFeeds() {
-        const urls = Plasmoid.configuration.feeds.split(/\s+/).filter(u => /^https?:\/\//.test(u))
-        let pending = urls.length, collected = []
+        const feeds = feedList()
+        let pending = feeds.length, collected = []
         if (!pending) { feedEvents = []; return }
-        for (const u of urls) {
+        for (const f of feeds) {
             const xhr = new XMLHttpRequest()
             xhr.onreadystatechange = () => {
                 if (xhr.readyState !== XMLHttpRequest.DONE) return
-                if (xhr.status === 200) collected = collected.concat(parseIcs(xhr.responseText, /holiday/i.test(decodeURIComponent(u))))
+                if (xhr.status === 200) collected = collected.concat(parseIcs(xhr.responseText, f))
                 if (--pending === 0) root.feedEvents = collected
             }
-            xhr.open("GET", u); xhr.send()
+            xhr.open("GET", f.url); xhr.send()
         }
     }
     Timer { interval: 30 * 60000; running: true; repeat: true; triggeredOnStart: true; onTriggered: root.syncFeeds() }
     Connections { target: Plasmoid.configuration; function onFeedsChanged() { root.syncFeeds() } }
     Timer { interval: 60000; running: true; repeat: true; onTriggered: { const n = new Date(); if (n.getDate() !== root.today.getDate()) root.today = n } }
+
+    // ---- reminders (as notifications, so the Dynamic Island shows them) --------
+    P5Support.DataSource { id: exec; engine: "executable"; onNewData: (s) => disconnectSource(s) }
+    readonly property var reminded: { try { return JSON.parse(Plasmoid.configuration.reminded) } catch (e) { return [] } }
+    function q(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'" }
+    function remind(id, e, body) {
+        if (reminded.includes(id)) return
+        const since = key(new Date(Date.now() - 2 * 86400000))
+        Plasmoid.configuration.reminded = JSON.stringify(reminded.filter(r => r.slice(0, 10) >= since).concat([id]))
+        const icon = e.kind === "birthday" ? "view-calendar-birthday" : e.kind === "anniversary" ? "view-calendar-special-occasion" : "view-calendar-upcoming-events"
+        exec.connectSource("notify-send -a " + q(e.source || "Calendar") + " -i " + icon + " -- " + q(titleOf(e)) + " " + q(body))
+    }
+    function checkReminders() {
+        if (!Plasmoid.configuration.reminders) return
+        const now = new Date(), tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+        for (const e of eventsOn(key(now)).concat(eventsOn(key(tomorrow)))) {
+            if (e.holiday) continue
+            const id = e.date + "|" + (e.time || "") + "|" + e.title
+            if (!e.time) {
+                if (e.date === key(now) && now.getHours() >= 9) remind(id + "|day", e, "Today")
+                continue
+            }
+            const mins = (new Date(e.date + "T" + e.time) - now) / 60000
+            if (mins > 0 && mins <= 10) remind(id + "|soon", e, "In " + Math.ceil(mins) + " min  ·  " + fmtTime(e.time))
+            else if (mins <= 0 && mins > -5) remind(id + "|now", e, "Now  ·  " + fmtTime(e.time))
+        }
+    }
+    Timer { interval: 30000; running: true; repeat: true; onTriggered: root.checkReminders() }   // first check 30 s after start
 
     fullRepresentation: GlassCard {
         Layout.minimumWidth: 360; Layout.preferredWidth: 400
@@ -143,6 +264,8 @@ PlasmoidItem {
                         readonly property bool isSel: k === root.key(root.selected)
                         readonly property var evs: root.eventsOn(k)
                         readonly property bool holiday: evs.some(e => e.holiday)
+                        readonly property var special: evs.find(e => e.kind)            // birthday / anniversary / important
+                        readonly property var dots: [...new Set(evs.filter(e => !e.holiday).map(e => root.colorOf(e)))].slice(0, 3)
                         visible: index < 35 || lead + new Date(root.shown.getFullYear(), root.shown.getMonth() + 1, 0).getDate() > 35
                         Rectangle {
                             anchors.centerIn: parent; width: 24; height: 24; radius: 12
@@ -152,18 +275,19 @@ PlasmoidItem {
                         Text {
                             anchors.centerIn: parent
                             text: parent.day.getDate()
-                            color: parent.isToday ? "white" : parent.holiday ? st.accent : st.text
+                            color: parent.isToday ? "white" : parent.special ? root.kindColor(parent.special.kind) : parent.holiday ? st.accent : st.text
                             opacity: parent.inMonth ? 1 : 0.3
                             font.family: st.mono; font.pixelSize: 12
                         }
-                        Rectangle {   // event dot
-                            visible: parent.evs.some(e => !e.holiday) && !parent.isToday
+                        Row {         // one dot per colour of that day's events
+                            visible: !parent.isToday
                             anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom }
-                            width: 4; height: 4; radius: 2; color: st.accent
+                            spacing: 2
+                            Repeater { model: parent.parent.dots; Rectangle { width: 4; height: 4; radius: 2; color: modelData } }
                         }
                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.selected = parent.day }
                         QQC2.ToolTip.visible: hov.hovered && evs.length > 0
-                        QQC2.ToolTip.text: evs.map(e => e.title).join("\n")
+                        QQC2.ToolTip.text: evs.map(e => (e.time ? root.fmtTime(e.time) + "  " : "") + root.titleOf(e)).join("\n")
                         HoverHandler { id: hov }
                     }
                 }
@@ -179,50 +303,101 @@ PlasmoidItem {
                 }
                 Item { Layout.fillWidth: true }
                 Kirigami.Icon {
-                    source: adding.visible ? "dialog-cancel" : "list-add"; isMask: true; color: ad.containsMouse ? st.accent : st.muted
+                    source: addBox.visible ? "dialog-cancel" : "list-add"; isMask: true; color: ad.containsMouse ? st.accent : st.muted
                     Layout.preferredWidth: 16; Layout.preferredHeight: 16
                     MouseArea { id: ad; anchors.fill: parent; anchors.margins: -5; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                onClicked: { adding.visible = !adding.visible; if (adding.visible) adding.forceActiveFocus() } }
+                                onClicked: { addBox.visible = !addBox.visible; if (addBox.visible) { root.pickedByHand = false; root.guess(""); adding.forceActiveFocus() } } }
                 }
             }
-            QQC2.TextField {
-                id: adding
+
+            // ---- add an event: text, then how often and which colour ----------
+            ColumnLayout {
+                id: addBox
                 visible: false
                 Layout.fillWidth: true
-                placeholderText: "09:30 Gym, on " + Qt.formatDate(root.selected, "d MMM") + " — Enter to add"
-                onAccepted: { root.addEvent(text); text = ""; visible = false }
-                Keys.onEscapePressed: { text = ""; visible = false }
+                spacing: 4
+                function close() { adding.text = ""; visible = false }
+                QQC2.TextField {
+                    id: adding
+                    Layout.fillWidth: true
+                    placeholderText: "09:30 Gym  or  05/03/2004 Mom's bday  (" + Qt.formatDate(root.selected, "d MMM") + ")"
+                    onTextChanged: root.guess(text)
+                    onAccepted: { root.addEvent(text); addBox.close() }
+                    Keys.onEscapePressed: addBox.close()
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+                    component Chip: Rectangle {
+                        id: chip
+                        property string label
+                        property bool on: false
+                        signal hit()
+                        implicitWidth: ct.implicitWidth + 14; implicitHeight: 20; radius: 10
+                        color: on ? st.accentSoft : (cm.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : st.faint)
+                        border.color: on ? st.accent : "transparent"
+                        Text { id: ct; anchors.centerIn: parent; text: chip.label; color: chip.on ? st.text : st.muted; font.pixelSize: 11 }
+                        MouseArea { id: cm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: chip.hit() }
+                    }
+                    Repeater {
+                        model: [["", "Once"], ["weekly", "Weekly"], ["monthly", "Monthly"], ["yearly", "Yearly"]]
+                        Chip { label: modelData[1]; on: root.newRepeat === modelData[0]
+                               onHit: { root.newRepeat = modelData[0]; root.pickedByHand = true } }
+                    }
+                    Item { Layout.fillWidth: true }
+                    Repeater {
+                        model: root.kinds
+                        Rectangle {
+                            width: 14; height: 14; radius: 7
+                            color: modelData.kind ? modelData.color : "transparent"
+                            border.width: root.newKind === modelData.kind ? 2 : 1
+                            border.color: root.newKind === modelData.kind ? "white" : st.border
+                            QQC2.ToolTip.visible: km.containsMouse
+                            QQC2.ToolTip.text: modelData.label
+                            MouseArea { id: km; anchors.fill: parent; anchors.margins: -3; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                        onClicked: { root.newKind = modelData.kind; root.pickedByHand = true } }
+                        }
+                    }
+                }
             }
 
-            ColumnLayout {
+            // ---- the agenda: as many rows as fit -----------------------------
+            Item {
+                id: list
+                visible: !addBox.visible
                 Layout.fillWidth: true
-                spacing: 3
+                Layout.fillHeight: true
+                clip: true
+                readonly property int rowH: 21
                 Text {
                     visible: root.agenda.length === 0
                     text: "Nothing planned"
                     color: st.muted; font.pixelSize: 13
                 }
-                Repeater {
-                    model: root.agenda
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 10
-                        Text {
-                            Layout.preferredWidth: 92
-                            text: (root.key(root.selected) === root.key(root.today) && modelData.date !== root.key(root.today)
-                                   ? Qt.formatDate(new Date(modelData.date + "T00:00"), "d MMM") + " " : "") + root.fmtTime(modelData.time)
-                            color: modelData.holiday ? st.accent : st.muted; font.family: st.mono; font.pixelSize: 11
-                        }
-                        Text { text: modelData.title; color: st.text; font.pixelSize: 14; elide: Text.ElideRight; Layout.fillWidth: true }
-                        TapHandler {
-                            acceptedButtons: Qt.RightButton
-                            enabled: modelData.local === true
-                            onTapped: root.removeEvent(modelData)
+                Column {
+                    width: parent.width
+                    Repeater {
+                        model: root.agenda.slice(0, Math.max(1, Math.floor(list.height / list.rowH)))
+                        RowLayout {
+                            width: parent.width; height: list.rowH
+                            spacing: 8
+                            Rectangle { width: 6; height: 6; radius: 3; color: root.colorOf(modelData) }
+                            Text {
+                                Layout.preferredWidth: 104
+                                text: (root.key(root.selected) === root.key(root.today) && modelData.date !== root.key(root.today)
+                                       ? Qt.formatDate(root.dayOf(modelData.date), "d MMM") + " " : "") + root.fmtTime(modelData.time)
+                                color: modelData.holiday ? st.accent : st.muted; font.family: st.mono; font.pixelSize: 11
+                            }
+                            Text { text: root.titleOf(modelData); color: st.text; font.pixelSize: 14; elide: Text.ElideRight; Layout.fillWidth: true }
+                            TapHandler {
+                                acceptedButtons: Qt.RightButton
+                                enabled: modelData.local === true
+                                onTapped: root.removeEvent(modelData)
+                            }
                         }
                     }
                 }
             }
-            Item { Layout.fillHeight: true }
         }
     }
 }
