@@ -130,3 +130,13 @@ Backups of the panel config (appletsrc + plasmashellrc) in `~/.local/share/glass
   ~/.config/systemd/user), install.sh's light option, light branches in widgets (Style.qml is dark-only).
   Don't reintroduce light mode or day/night switching. Older notes above that mention light mode,
   daynight.sh or Frost-Light are history only.
+- 2026-11-19 ~01:40: island extras. status.py now reports cam (/proc fds on /dev/video*), rec (running
+  PipeWire Video/Source from kwin / screencast portal; NOT live-tested), dl (~/Downloads *.part /
+  *.crdownload written in the last 20 s), recent (finished files), loc (Weather widget lat/lon).
+  Island: activities list in priority order (rec, music, timer, stopwatch, job, dl, focus); timer and
+  stopwatch state in the island's own config (contents/config/main.xml); rain alert via Open-Meteo
+  minutely_15 every 15 min (2 h cooldown, not seen live: no rain forecast). DND shortcut Meta+Shift+D:
+  extras/shell/frost-dnd (writes plasmanotifyrc DoNotDisturb/Until with `kwriteconfig6 --notify`, which
+  Plasma needs to notice) + frost-dnd.desktop registered in kglobalaccel ([services] group).
+  Live-verified: timer view + chips + buttons (the user clicked them), download pill + Downloaded
+  banner, camera dot, DND shortcut action.

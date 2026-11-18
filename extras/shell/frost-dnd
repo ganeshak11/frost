@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Toggle Plasma's Do Not Disturb. The Dynamic Island shows "Do Not Disturb On/Off".
+# Bound to Meta+Shift+D by extras/shell/install-shortcuts.sh.
+#   frost-dnd          toggle
+#   frost-dnd on|off   force a state
+set -euo pipefail
+cur=$(kreadconfig6 --file plasmanotifyrc --group DoNotDisturb --key Until)
+active=$(python3 - "$cur" <<'PY'
+import sys, datetime as dt
+v = sys.argv[1].strip()
+try:
+    t = dt.datetime(*map(int, v.split(","))) if "," in v else dt.datetime.fromisoformat(v)
+    print("yes" if t > dt.datetime.now() else "no")
+except Exception:
+    print("no")
+PY
+)
+want=${1:-toggle}
+[ "$want" = toggle ] && { [ "$active" = yes ] && want=off || want=on; }
+if [ "$want" = on ]; then
+  kwriteconfig6 --notify --file plasmanotifyrc --group DoNotDisturb --key Until "2100,1,1,0,0,0"
+else
+  kwriteconfig6 --notify --file plasmanotifyrc --group DoNotDisturb --key Until --delete
+fi

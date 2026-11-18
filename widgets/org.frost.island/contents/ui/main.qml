@@ -5,10 +5,15 @@
 //   idle         the time; an orange dot when an app is using the microphone
 //   music        artwork + live beat bars (any MPRIS player)
 //   focus        timer icon + countdown from the Frost Focus widget
-//   both         music in the pill, the focus timer as a second small bubble
+//   recording    red dot + elapsed time while the screen is recorded / shared
+//   timer        countdown you start from the island (stopwatch counts up)
+//   transfers    Dolphin / KIO copies and moves, Firefox / Brave downloads
+//   two at once  the most important one in the pill, the next as a bubble
+//   privacy      green dot = camera in use, orange dot = microphone in use
 // Events briefly expand it into a banner, then it shrinks back:
 //   notifications (click to open, hover to keep it), charger plugged in or
-//   out, low battery, Bluetooth device connected, Do Not Disturb on/off
+//   out, low battery, Bluetooth device connected, Do Not Disturb on/off,
+//   timer finished, download finished, rain expected within the hour
 // Click the pill to expand it: full music player, big focus timer, or (when
 // idle) date, battery, devices and your latest notifications. It collapses
 // when the pointer leaves it.
@@ -54,7 +59,7 @@ PlasmoidItem {
 
     // ---- clock -------------------------------------------------------------
     property date now: new Date()
-    Timer { interval: 1000; running: true; repeat: true; triggeredOnStart: true; onTriggered: { root.now = new Date(); root.tickMusic() } }
+    Timer { interval: 1000; running: true; repeat: true; triggeredOnStart: true; onTriggered: { root.now = new Date(); root.tickMusic(); root.checkTimer() } }
 
     // ---- music -------------------------------------------------------------
     Mpris.Mpris2Model { id: mpris }
@@ -84,7 +89,7 @@ PlasmoidItem {
     }
 
     // ---- system status (battery, mic, bluetooth, focus timer) --------------
-    property var sys: ({ battery: null, mic: [], bt: [], focus: null })
+    property var sys: ({ battery: null, mic: [], cam: [], rec: [], bt: [], dl: [], recent: [], focus: null, loc: null })
     readonly property string statusCmd: "python3 '" + Qt.resolvedUrl("../code/status.py").toString().replace("file://", "") + "'"
     P5Support.DataSource {
         id: exec; engine: "executable"
@@ -107,11 +112,95 @@ PlasmoidItem {
             else if (!plugged(b) && plugged(ob)) banner({ icon: "battery-full", title: "On battery", value: b.pct + "%", battery: b.pct })
             if (!plugged(b) && b.pct <= 20 && ob.pct > 20) banner({ icon: "battery-caution", title: "Low battery", value: b.pct + "%", tint: accent, battery: b.pct })
         }
+        // browser downloads: speed from the size change, a banner when one ends
+        const prev = {}
+        for (const d of (old.dl || [])) prev[d.path] = d
+        for (const d of (s.dl || [])) d.speed = prev[d.path] ? Math.max(0, (d.bytes - prev[d.path].bytes) / 3) : 0
+        for (const d of (old.dl || [])) if (!(s.dl || []).some(x => x.path === d.path)) {
+            const ok = (s.recent || []).includes(d.name)
+            banner({ icon: ok ? "folder-download" : "dialog-cancel", app: d.from, title: d.name,
+                     value: ok ? "Downloaded" : "Stopped", tint: ok ? "#4ade80" : muted,
+                     url: ok ? "file://" + d.path.replace(/\.(part|crdownload)$/, "") : "" })
+        }
         for (const d of s.bt) if (!(old.bt || []).includes(d)) banner({ icon: "audio-headphones", title: d, value: "Connected" })
         for (const d of (old.bt || [])) if (!s.bt.includes(d)) banner({ icon: "bluetooth-disabled", title: d, value: "Disconnected" })
     }
     readonly property bool charging: !!sys.battery && sys.battery.status === "Charging"
     readonly property bool micInUse: (sys.mic || []).length > 0
+    readonly property bool camInUse: (sys.cam || []).length > 0
+    readonly property bool recording: (sys.rec || []).length > 0
+    property double recSince: 0
+    onRecordingChanged: recSince = recording ? Date.now() : 0
+    readonly property var dl: (sys.dl || []).length ? sys.dl[0] : null
+    readonly property bool dlActive: !!dl
+    function size(b) {
+        const u = ["B", "KB", "MB", "GB"]; let i = 0; b = Number(b) || 0
+        while (b >= 1024 && i < 3) { b /= 1024; i++ }
+        return (i ? b.toFixed(b < 10 ? 1 : 0) : b.toFixed(0)) + " " + u[i]
+    }
+    function hms(sec) {
+        sec = Math.max(0, Math.floor(sec))
+        const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), x = sec % 60
+        return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0")
+    }
+    readonly property string recText: hms((now.getTime() - recSince) / 1000)
+
+    // ---- timer and stopwatch (started from the expanded island) -------------
+    readonly property var cfg: Plasmoid.configuration
+    readonly property bool timerRunning: Number(cfg.timerEnd) > 0
+    readonly property bool timerActive: timerRunning || cfg.timerLeft > 0
+    readonly property int timerLeftNow: timerRunning ? Math.max(0, Math.ceil((Number(cfg.timerEnd) - now.getTime()) / 1000)) : cfg.timerLeft
+    readonly property real timerProgress: cfg.timerTotal > 0 ? 1 - timerLeftNow / cfg.timerTotal : 0
+    function startTimer(min) { cfg.timerTotal = min * 60; cfg.timerLeft = 0; cfg.timerEnd = String(Date.now() + min * 60000); isOpen = false }
+    function pauseTimer() { cfg.timerLeft = timerLeftNow; cfg.timerEnd = "0" }
+    function resumeTimer() { cfg.timerEnd = String(Date.now() + cfg.timerLeft * 1000); cfg.timerLeft = 0 }
+    function cancelTimer() { cfg.timerEnd = "0"; cfg.timerLeft = 0 }
+    function addMinute() {
+        cfg.timerTotal = cfg.timerTotal + 60
+        timerRunning ? cfg.timerEnd = String(Number(cfg.timerEnd) + 60000) : cfg.timerLeft = cfg.timerLeft + 60
+    }
+    function checkTimer() {
+        if (timerRunning && Number(cfg.timerEnd) <= Date.now()) {
+            const total = cfg.timerTotal
+            cancelTimer()
+            banner({ icon: "chronometer", title: "Timer done", value: hms(total), tint: accent, urgent: true, alarm: true })
+        }
+    }
+    readonly property bool swActive: cfg.swRunning || Number(cfg.swAcc) > 0
+    readonly property double swMs: (Number(cfg.swAcc) || 0) + (cfg.swRunning ? now.getTime() - Number(cfg.swStart) : 0)
+    function startSw() { cfg.swStart = String(Date.now()); cfg.swRunning = true; isOpen = false }
+    function pauseSw() { cfg.swAcc = String(swMs); cfg.swRunning = false }
+    function resetSw() { cfg.swAcc = "0"; cfg.swRunning = false }
+
+    // ---- rain alert: precipitation in the next hour at the Weather widget's place
+    property double lastRainAlert: 0
+    function checkRain() {
+        if (Date.now() - lastRainAlert < 2 * 3600000) return
+        const l = sys.loc || { lat: 12.2958, lon: 76.6394, city: "Mysuru" }
+        const xhr = new XMLHttpRequest()
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200) return
+            try {
+                const m = JSON.parse(xhr.responseText).minutely_15, t = Date.now()
+                let i0 = 0
+                for (let i = 0; i < m.time.length; i++) if (new Date(m.time[i]).getTime() <= t) i0 = i
+                if ((m.precipitation[i0] || 0) >= 0.1) return                 // already raining
+                for (let k = i0 + 1; k < Math.min(m.time.length, i0 + 5); k++) {
+                    if ((m.precipitation[k] || 0) >= 0.2 || (m.precipitation_probability[k] || 0) >= 70) {
+                        const mins = Math.max(5, Math.round((new Date(m.time[k]).getTime() - t) / 60000))
+                        root.lastRainAlert = t
+                        root.banner({ icon: "weather-showers", title: "Rain in about " + mins + " min", value: l.city, tint: "#60a5fa" })
+                        return
+                    }
+                }
+            } catch (e) {}
+        }
+        xhr.open("GET", "https://api.open-meteo.com/v1/forecast?latitude=" + l.lat + "&longitude=" + l.lon
+                 + "&minutely_15=precipitation,precipitation_probability&past_minutely_15=1&forecast_minutely_15=6&timezone=auto")
+        xhr.send()
+    }
+    Timer { interval: 15 * 60000; running: true; repeat: true; onTriggered: root.checkRain() }
+    Timer { interval: 20000; running: true; onTriggered: root.checkRain() }     // once soon after start
 
     // focus timer from the Frost Focus widget
     readonly property var focusState: sys.focus
@@ -234,7 +323,7 @@ PlasmoidItem {
         isOpen = false
         bannerTimer.interval = current.urgent ? 10000 : 4500
         bannerTimer.restart()
-        if (!dnd) exec.connectSource(soundCmd)
+        if (!dnd || current.alarm) exec.connectSource(soundCmd)
     }
     // a soft pop for each banner (none during Do Not Disturb)
     readonly property string soundFile: Qt.resolvedUrl("../sounds/pop.wav").toString().replace("file://", "")
@@ -243,9 +332,12 @@ PlasmoidItem {
 
     property bool isOpen: false
     onIsOpenChanged: if (isOpen && primary === "idle") unseen = 0
-    readonly property string primary: musicActive ? "music" : jobActive ? "job" : focusActive ? "focus" : "idle"
-    readonly property string secondary: primary === "music" ? (jobActive ? "job" : focusActive ? "focus" : "")
-                                      : primary === "job" && focusActive ? "focus" : ""
+    // most important first: the first goes in the pill, the second in a bubble
+    readonly property var activities: [recording ? "rec" : "", musicActive ? "music" : "", timerActive ? "timer" : "",
+                                       swActive ? "stopwatch" : "", jobActive ? "job" : "", dlActive ? "dl" : "",
+                                       focusActive ? "focus" : ""].filter(a => a)
+    readonly property string primary: activities.length ? activities[0] : "idle"
+    readonly property string secondary: activities.length > 1 ? activities[1] : ""
     // ---- level bar for volume, brightness and other on-screen displays ---------
     property var hud: null                 // {icon, value (-1 = text only), max, text}
     function showHud(icon, value, maxValue, text) {
@@ -267,12 +359,17 @@ PlasmoidItem {
 
     // sizes per state
     readonly property size compactSize: primary === "music" ? Qt.size(232, pillH) : primary === "focus" ? Qt.size(196, pillH)
-                                        : primary === "job" ? Qt.size(220, pillH)
-                                        : Qt.size(charging || micInUse ? 150 : 118, pillH)
+                                        : primary === "job" || primary === "dl" ? Qt.size(232, pillH)
+                                        : primary === "rec" ? Qt.size(150, pillH)
+                                        : primary === "timer" || primary === "stopwatch" ? Qt.size(176, pillH)
+                                        : Qt.size(charging || micInUse || camInUse ? 150 : 118, pillH)
     readonly property size targetSize: mode === "hud" ? Qt.size(300, 40)
                                      : mode === "banner" ? Qt.size(current.body ? 420 : 340, current.body ? 84 : 64)
                                      : mode === "expanded" ? (primary === "music" ? Qt.size(440, 176) : primary === "focus" ? Qt.size(360, 150)
-                                                            : primary === "job" ? Qt.size(400, 150) : Qt.size(420, 124 + histH))
+                                                            : primary === "job" || primary === "dl" ? Qt.size(400, 150)
+                                                            : primary === "rec" ? Qt.size(340, 110)
+                                                            : primary === "timer" || primary === "stopwatch" ? Qt.size(380, 150)
+                                                            : Qt.size(420, 168 + histH))
                                      : compactSize
 
     readonly property int histRow: 40
@@ -347,11 +444,53 @@ PlasmoidItem {
             Text { text: root.jobPctText; color: root.jobTint; font.family: root.mono; font.pixelSize: 13 }
         }
         RowLayout {
+            anchors { fill: parent; leftMargin: 12; rightMargin: 14 }
+            spacing: 8
+            visible: root.primary === "rec"
+            Rectangle { width: 9; height: 9; radius: 4.5; color: root.accent
+                        SequentialAnimation on opacity { running: root.primary === "rec"; loops: Animation.Infinite
+                            NumberAnimation { to: 0.25; duration: 650 } NumberAnimation { to: 1; duration: 650 } } }
+            Text { text: "REC"; color: root.muted; font.pixelSize: 11; font.letterSpacing: 1.5; Layout.fillWidth: true }
+            Text { text: root.recText; color: root.accent; font.family: root.mono; font.pixelSize: 13 }
+        }
+        RowLayout {
+            anchors { fill: parent; leftMargin: 10; rightMargin: 14 }
+            spacing: 8
+            visible: root.primary === "timer"
+            Ring { progress: root.timerProgress; tint: "#fbbf24" }
+            Text { text: root.timerRunning ? "Timer" : "Paused"; color: root.muted; font.pixelSize: 12; Layout.fillWidth: true }
+            Text { text: root.hms(root.timerLeftNow); color: "#fbbf24"; font.family: root.mono; font.pixelSize: 13 }
+        }
+        RowLayout {
+            anchors { fill: parent; leftMargin: 12; rightMargin: 14 }
+            spacing: 8
+            visible: root.primary === "stopwatch"
+            Kirigami.Icon { source: "chronometer"; isMask: true; color: "#fbbf24"; Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
+            Text { text: root.cfg.swRunning ? "Stopwatch" : "Paused"; color: root.muted; font.pixelSize: 12; Layout.fillWidth: true }
+            Text { text: root.hms(root.swMs / 1000); color: "#fbbf24"; font.family: root.mono; font.pixelSize: 13 }
+        }
+        RowLayout {
+            anchors { fill: parent; leftMargin: 12; rightMargin: 14 }
+            spacing: 8
+            visible: root.primary === "dl"
+            Kirigami.Icon { source: "folder-download"; Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
+            Text { text: root.dl ? root.dl.name : ""; color: root.muted; font.pixelSize: 12; elide: Text.ElideMiddle; Layout.fillWidth: true }
+            Text { text: root.dl ? root.size(root.dl.bytes) : ""; color: root.jobTint; font.family: root.mono; font.pixelSize: 12 }
+        }
+        Row {   // privacy dots while another activity fills the pill
+            anchors { right: parent.right; top: parent.top; rightMargin: 5; topMargin: 4 }
+            spacing: 3
+            visible: root.primary !== "idle"
+            Rectangle { visible: root.camInUse; width: 5; height: 5; radius: 2.5; color: "#4ade80" }
+            Rectangle { visible: root.micInUse; width: 5; height: 5; radius: 2.5; color: "#fb923c" }
+        }
+        RowLayout {
             anchors.centerIn: parent
             spacing: 8
             visible: root.primary === "idle"
             Kirigami.Icon { visible: root.charging; source: "battery-charging"; Layout.preferredWidth: 14; Layout.preferredHeight: 14; isMask: true; color: "#4ade80" }
             Text { text: Qt.formatTime(root.now, "h:mm"); color: root.text; font.family: root.mono; font.pixelSize: 13 }
+            Rectangle { visible: root.camInUse; width: 7; height: 7; radius: 3.5; color: "#4ade80" }
             Rectangle { visible: root.micInUse; width: 7; height: 7; radius: 3.5; color: "#fb923c" }
             Rectangle { visible: root.unseen > 0; width: 7; height: 7; radius: 3.5; color: root.accent }
         }
@@ -402,8 +541,16 @@ PlasmoidItem {
             color: "black"; border.color: Qt.rgba(1, 1, 1, 0.10)
             opacity: pop.visible ? 0 : 1
             Ring { anchors.centerIn: parent
-                   progress: root.secondary === "job" ? (root.job ? root.job.pct / 100 : 0) : root.focusProgress
-                   tint: root.secondary === "job" ? root.jobTint : root.focusBreak ? "#4ade80" : root.accent }
+                   visible: ["job", "focus", "timer"].includes(root.secondary)
+                   progress: root.secondary === "job" ? (root.job ? root.job.pct / 100 : 0)
+                           : root.secondary === "timer" ? root.timerProgress : root.focusProgress
+                   tint: root.secondary === "job" ? root.jobTint : root.secondary === "timer" ? "#fbbf24"
+                       : root.focusBreak ? "#4ade80" : root.accent }
+            Art { anchors.centerIn: parent; size: 20; visible: root.secondary === "music" }
+            Rectangle { anchors.centerIn: parent; width: 9; height: 9; radius: 4.5; color: root.accent; visible: root.secondary === "rec" }
+            Kirigami.Icon { anchors.centerIn: parent; width: 16; height: 16; visible: ["stopwatch", "dl"].includes(root.secondary)
+                            source: root.secondary === "dl" ? "folder-download" : "chronometer"
+                            isMask: root.secondary === "stopwatch"; color: "#fbbf24" }
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.isOpen = true }
         }
     }
@@ -456,6 +603,7 @@ PlasmoidItem {
                 TapHandler {
                     onTapped: {
                         if (root.current && root.current.notifId) root.openNotification(root.current.notifId)
+                        if (root.current && root.current.url) Qt.openUrlExternally(root.current.url)
                         if (root.current) { bannerTimer.stop(); root.nextBanner() }
                     }
                 }
@@ -618,6 +766,82 @@ PlasmoidItem {
                         }
                     }
 
+                    component Act: Text {
+                        signal hit()
+                        color: am.containsMouse ? root.accent : root.text; font.pixelSize: 13
+                        MouseArea { id: am; anchors.fill: parent; anchors.margins: -6; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: parent.hit() }
+                    }
+
+                    // expanded: screen recording
+                    RowLayout {
+                        visible: root.mode === "expanded" && root.primary === "rec"
+                        anchors { fill: parent; margins: 22 }
+                        spacing: 16
+                        Rectangle { width: 18; height: 18; radius: 9; color: root.accent
+                                    SequentialAnimation on opacity { running: root.primary === "rec"; loops: Animation.Infinite
+                                        NumberAnimation { to: 0.25; duration: 650 } NumberAnimation { to: 1; duration: 650 } } }
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 2
+                            Text { text: "SCREEN RECORDING"; color: root.muted; font.pixelSize: 11; font.letterSpacing: 2 }
+                            Text { text: root.recText; color: root.text; font.family: root.mono; font.pixelSize: 30 }
+                            Text { text: (root.sys.rec || []).join(", "); color: root.muted; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
+                        }
+                    }
+
+                    // expanded: timer / stopwatch
+                    RowLayout {
+                        visible: root.mode === "expanded" && (root.primary === "timer" || root.primary === "stopwatch")
+                        readonly property bool isTimer: root.primary === "timer"
+                        anchors { fill: parent; margins: 22 }
+                        spacing: 18
+                        Item {
+                            Layout.preferredWidth: 72; Layout.preferredHeight: 72
+                            Ring { anchors.fill: parent; width: 72; height: 72; visible: parent.parent.isTimer; progress: root.timerProgress; tint: "#fbbf24" }
+                            Kirigami.Icon { anchors.centerIn: parent; width: 34; height: 34; source: "chronometer"; isMask: true; color: "#fbbf24"; visible: !parent.parent.isTimer }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 4
+                            Text { text: parent.parent.isTimer ? (root.timerRunning ? "TIMER" : "TIMER · PAUSED") : (root.cfg.swRunning ? "STOPWATCH" : "STOPWATCH · PAUSED")
+                                   color: root.muted; font.pixelSize: 11; font.letterSpacing: 2 }
+                            Text { text: parent.parent.isTimer ? root.hms(root.timerLeftNow) : root.hms(root.swMs / 1000)
+                                   color: root.text; font.family: root.mono; font.pixelSize: 34 }
+                            RowLayout {
+                                spacing: 18
+                                Act { visible: parent.parent.parent.isTimer; text: root.timerRunning ? "Pause" : "Resume"
+                                      onHit: root.timerRunning ? root.pauseTimer() : root.resumeTimer() }
+                                Act { visible: parent.parent.parent.isTimer; text: "+1 min"; onHit: root.addMinute() }
+                                Act { visible: parent.parent.parent.isTimer; text: "Cancel"; color: root.muted; onHit: root.cancelTimer() }
+                                Act { visible: !parent.parent.parent.isTimer; text: root.cfg.swRunning ? "Pause" : "Resume"
+                                      onHit: root.cfg.swRunning ? root.pauseSw() : root.startSw() }
+                                Act { visible: !parent.parent.parent.isTimer; text: "Reset"; color: root.muted; onHit: root.resetSw() }
+                            }
+                        }
+                    }
+
+                    // expanded: browser download
+                    RowLayout {
+                        visible: root.mode === "expanded" && root.primary === "dl"
+                        anchors { fill: parent; margins: 22 }
+                        spacing: 18
+                        Kirigami.Icon { Layout.preferredWidth: 48; Layout.preferredHeight: 48; source: "folder-download" }
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 5
+                            Text { text: root.dl ? root.dl.from.toUpperCase() + " · DOWNLOADING" : ""; color: root.muted; font.pixelSize: 11; font.letterSpacing: 2 }
+                            Text { text: root.dl ? root.dl.name : ""; color: root.text; font.pixelSize: 15; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                            Rectangle {   // the browser doesn't say the total size: a moving sheen instead of a percentage
+                                id: dlTrack
+                                Layout.fillWidth: true; height: 4; radius: 2; color: Qt.rgba(1, 1, 1, 0.12); clip: true
+                                Rectangle {
+                                    id: sheen
+                                    width: dlTrack.width * 0.3; height: 4; radius: 2; color: root.jobTint
+                                    NumberAnimation on x { from: -sheen.width; to: dlTrack.width; duration: 1400; loops: Animation.Infinite; running: root.primary === "dl" }
+                                }
+                            }
+                            Text { text: root.dl ? root.size(root.dl.bytes) + (root.dl.speed > 0 ? "  ·  " + root.size(root.dl.speed) + "/s" : "") : ""
+                                   color: root.jobTint; font.family: root.mono; font.pixelSize: 13 }
+                        }
+                    }
+
                     // expanded: idle overview
                     ColumnLayout {
                         visible: root.mode === "expanded" && root.primary === "idle"
@@ -639,7 +863,37 @@ PlasmoidItem {
                                        text: (root.sys.bt || []).join(", ") }
                                 Text { Layout.alignment: Qt.AlignRight; color: "#fb923c"; font.pixelSize: 11; visible: root.micInUse
                                        text: "Mic in use: " + (root.sys.mic || []).join(", ") }
+                                Text { Layout.alignment: Qt.AlignRight; color: "#4ade80"; font.pixelSize: 11; visible: root.camInUse
+                                       text: "Camera in use: " + (root.sys.cam || []).join(", ") }
                             }
+                        }
+                        Rectangle { Layout.fillWidth: true; height: 1; color: Qt.rgba(1, 1, 1, 0.08) }
+                        RowLayout {   // start a timer or the stopwatch
+                            Layout.fillWidth: true; spacing: 6
+                            component Chip: Rectangle {
+                                id: chip
+                                property string label
+                                signal hit()
+                                signal wheel(int d)
+                                implicitWidth: ct.implicitWidth + 18; implicitHeight: 26; radius: 13
+                                color: cm2.containsMouse ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.07)
+                                border.color: Qt.rgba(1, 1, 1, 0.10)
+                                Text { id: ct; anchors.centerIn: parent; text: chip.label; color: root.text; font.pixelSize: 12 }
+                                MouseArea { id: cm2; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                            onClicked: chip.hit(); onWheel: (w) => chip.wheel(w.angleDelta.y) }
+                            }
+                            Kirigami.Icon { source: "chronometer"; isMask: true; color: "#fbbf24"; Layout.preferredWidth: 16; Layout.preferredHeight: 16 }
+                            Chip { label: "1m"; onHit: root.startTimer(1) }
+                            Chip { label: "5m"; onHit: root.startTimer(5) }
+                            Chip { label: "10m"; onHit: root.startTimer(10) }
+                            Chip { label: "25m"; onHit: root.startTimer(25) }
+                            Chip {   // scroll to change, click to start
+                                label: root.cfg.customMinutes + "m ↕"
+                                onHit: root.startTimer(root.cfg.customMinutes)
+                                onWheel: (d) => root.cfg.customMinutes = Math.max(1, Math.min(180, root.cfg.customMinutes + (d > 0 ? 1 : -1)))
+                            }
+                            Item { Layout.fillWidth: true }
+                            Chip { label: "Stopwatch"; onHit: root.startSw() }
                         }
                         Rectangle { Layout.fillWidth: true; height: 1; color: Qt.rgba(1, 1, 1, 0.08) }
                         RowLayout {
