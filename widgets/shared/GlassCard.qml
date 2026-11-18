@@ -20,7 +20,7 @@ Rectangle {
     Rectangle {   // inner highlight
         anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 1; leftMargin: card.radius; rightMargin: card.radius }
         height: 1
-        color: Qt.rgba(1, 1, 1, 0.08)
+        color: st.highlight
     }
 
     opacity: 0

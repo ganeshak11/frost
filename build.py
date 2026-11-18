@@ -220,8 +220,9 @@ def panel_svg():
             ww, hh = (0.01, m) if side in ("top", "bottom") else (m, 0.01)
             out.append(f'<rect id="{pre}hint-{side}-margin" x="{ox + i * 2}" y="60" width="{ww or 0.01}" height="{hh or 0.01}" fill="none"/>')
 
-    glass = 'fill="#121216" fill-opacity="0.5"'
-    rim = 'fill="#ffffff" opacity="0.13"'      # element opacity: stays faint in the opaque variant too
+    # the dock's glass follows the colour scheme: dark glass under Frost Dark, light under Frost Light
+    glass = 'class="ColorScheme-Background" fill="currentColor" fill-opacity="0.55"'
+    rim = 'class="ColorScheme-Text" fill="currentColor" opacity="0.13"'      # element opacity: stays faint when opaque
     nine("", 0, 4, 2, None)                                   # transparent
     hints("", 0, 0, 0, 0, 0)
     # Its blur mask is a single pixel per corner: with no mask at all Plasma
@@ -326,40 +327,48 @@ def decoration_svg():
             f'<defs>{"".join(defs)}</defs>{"".join(body)}</svg>\n')
 
 
-BTN = {"close": ((255, 95, 87), "x"), "minimize": ((255, 189, 46), "min"),
-       "maximize": ((40, 200, 64), "max"), "restore": ((40, 200, 64), "max")}
+BTN = ("close", "minimize", "maximize", "restore")
+BW, BH = 28, 22          # button size: a bare glyph, with a soft rounded square on hover
+CLOSE_RED = (242, 29, 67)
 
 
-def button_svg(kind):
-    color, glyph = BTN[kind]
-    s, r = 14, 6.25
-    cx = cy = s / 2
-    dark = mix(color, (0, 0, 0), .35)
-    glyphs = {
-        "x": f'M{cx-2.5},{cy-2.5} L{cx+2.5},{cy+2.5} M{cx+2.5},{cy-2.5} L{cx-2.5},{cy+2.5}',
-        "min": f'M{cx-3},{cy} H{cx+3}',
-        "max": f'M{cx-3},{cy} H{cx+3} M{cx},{cy-3} V{cy+3}',
-    }[glyph]
-    grey = (128, 128, 136)
+def button_svg(kind, p):
+    """Window buttons, style "Glyphs": thin icons in soft text colour; hovering
+    shows a faint rounded square behind them, and close turns solid red."""
+    cx, cy, k = BW / 2, BH / 2, 4
+    glyph = {
+        "close": f'<path d="M{cx-k+.5},{cy-k+.5} L{cx+k-.5},{cy+k-.5} M{cx+k-.5},{cy-k+.5} L{cx-k+.5},{cy+k-.5}" {{s}}/>',
+        "minimize": f'<path d="M{cx-k},{cy} H{cx+k}" {{s}}/>',
+        "maximize": f'<rect x="{cx-k+.5}" y="{cy-k+.5}" width="{2*k-1}" height="{2*k-1}" rx="2" {{s}}/>',
+        "restore": (f'<path d="M{cx-k+2.5},{cy-k+.5} H{cx+k-1} A1.5,1.5 0 0 1 {cx+k-.5},{cy-k+2} V{cy+k-3}" {{s}}/>'
+                    f'<rect x="{cx-k+.5}" y="{cy-k+2.5}" width="{2*k-3}" height="{2*k-3}" rx="1.5" {{s}}/>'),
+    }[kind]
+    text, dim, light = p["text"], p["dim"], p["window"][0] > 128
+    soft = mix(text, p["window"], .22)                       # glyph at rest
+    def state(fg, square=None, sq_op=0.0, op=1.0):
+        sq = f'<rect x="0.5" y="0.5" width="{BW-1}" height="{BH-1}" rx="7" fill="{hx(square)}" fill-opacity="{sq_op}"/>' if square else ""
+        stroke = f'stroke="{hx(fg)}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"'
+        return f'<g opacity="{op}">{sq}{glyph.replace("{s}", stroke)}</g>'
+    close = kind == "close"
+    hover = state((255, 255, 255), CLOSE_RED, 1) if close else state(text, text, .10 if light else .12)
+    pressed = state((255, 255, 255), mix(CLOSE_RED, (0, 0, 0), .2), 1) if close else state(text, text, .18 if light else .22)
     states = {
-        "active": (color, False, 1), "hover": (color, True, 1), "pressed": (mix(color, (0, 0, 0), .2), True, 1),
-        "deactivated": (color, False, .45),
-        "inactive": (grey, False, .55), "hover-inactive": (color, True, 1),
-        "pressed-inactive": (mix(color, (0, 0, 0), .2), True, 1), "deactivated-inactive": (grey, False, .35),
+        "active": state(soft), "hover": hover, "pressed": pressed, "deactivated": state(soft, op=.3),
+        "inactive": state(dim, op=.8), "hover-inactive": hover, "pressed-inactive": pressed,
+        "deactivated-inactive": state(dim, op=.25),
     }
     parts, x = [], 0
-    for st, (col, show, op) in states.items():
-        g = f'<path d="{glyphs}" stroke="{hx(dark)}" stroke-width="1.4" stroke-linecap="round" fill="none"/>' if show else ""
-        parts.append(f'<g id="{st}-center" transform="translate({x},0)" opacity="{op}">'
-                     f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{hx(col)}" stroke="{hx(mix(col,(0,0,0),.18))}" stroke-width="0.5"/>{g}</g>')
-        x += s + 4
-    return f'<svg xmlns="http://www.w3.org/2000/svg" width="{x}" height="{s}">{"".join(parts)}</svg>\n'
+    for st, inner in states.items():
+        parts.append(f'<g id="{st}-center" transform="translate({x},0)">'
+                     f'<rect width="{BW}" height="{BH}" fill="#000" fill-opacity="0"/>{inner}</g>')
+        x += BW + 4
+    return f'<svg xmlns="http://www.w3.org/2000/svg" width="{x}" height="{BH}">{"".join(parts)}</svg>\n'
 
 
 def aurorae(name, p, base: Path):
     write(base / "decoration.svg", decoration_svg())
     for k in BTN:
-        write(base / f"{k}.svg", button_svg(k))
+        write(base / f"{k}.svg", button_svg(k, p))
     write(base / f"Frost{name}rc", f"""[General]
 ActiveTextColor={c(p['text'])}
 InactiveTextColor={c(p['dim'])}
@@ -386,10 +395,10 @@ TitleEdgeRightMaximized=10
 TitleBorderLeft=8
 TitleBorderRight=8
 TitleHeight={TH}
-ButtonWidth=14
-ButtonHeight=14
-ButtonSpacing=8
-ButtonMarginTop={(TH-14)//2}
+ButtonWidth={BW}
+ButtonHeight={BH}
+ButtonSpacing=2
+ButtonMarginTop={(TH-BH)//2}
 ExplicitButtonSpacer=10
 PaddingTop={P}
 PaddingBottom={P}

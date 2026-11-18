@@ -30,8 +30,9 @@ PlasmoidItem {
     // your own events: {id, date, time, title, repeat: ""|weekly|monthly|yearly, kind: ""|birthday|anniversary|important}
     readonly property var localEvents: { try { return JSON.parse(Plasmoid.configuration.events) } catch (e) { return [] } }
 
+    Style { id: rs }                     // the card's colours, for untagged events
     readonly property var kinds: [
-        { kind: "", label: "No tag", color: "#cfcfd6" },
+        { kind: "", label: "No tag", color: rs.light ? "#5f5f6b" : "#cfcfd6" },
         { kind: "birthday", label: "Birthday", color: "#f472b6" },
         { kind: "anniversary", label: "Anniversary", color: "#a78bfa" },
         { kind: "important", label: "Important", color: "#F21D43" }
@@ -270,7 +271,7 @@ PlasmoidItem {
                         Rectangle {
                             anchors.centerIn: parent; width: 24; height: 24; radius: 12
                             color: parent.isToday ? st.accent : "transparent"
-                            border.color: parent.isSel && !parent.isToday ? Qt.rgba(1, 1, 1, 0.35) : "transparent"
+                            border.color: parent.isSel && !parent.isToday ? st.subtle : "transparent"
                         }
                         Text {
                             anchors.centerIn: parent
@@ -334,7 +335,7 @@ PlasmoidItem {
                         property bool on: false
                         signal hit()
                         implicitWidth: ct.implicitWidth + 14; implicitHeight: 20; radius: 10
-                        color: on ? st.accentSoft : (cm.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : st.faint)
+                        color: on ? st.accentSoft : (cm.containsMouse ? st.hover : st.faint)
                         border.color: on ? st.accent : "transparent"
                         Text { id: ct; anchors.centerIn: parent; text: chip.label; color: chip.on ? st.text : st.muted; font.pixelSize: 11 }
                         MouseArea { id: cm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: chip.hit() }
@@ -351,7 +352,7 @@ PlasmoidItem {
                             width: 14; height: 14; radius: 7
                             color: modelData.kind ? modelData.color : "transparent"
                             border.width: root.newKind === modelData.kind ? 2 : 1
-                            border.color: root.newKind === modelData.kind ? "white" : st.border
+                            border.color: root.newKind === modelData.kind ? st.text : st.border
                             QQC2.ToolTip.visible: km.containsMouse
                             QQC2.ToolTip.text: modelData.label
                             MouseArea { id: km; anchors.fill: parent; anchors.margins: -3; hoverEnabled: true; cursorShape: Qt.PointingHandCursor

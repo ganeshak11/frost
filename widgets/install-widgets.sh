@@ -27,3 +27,15 @@ PY
     || kpackagetool6 -t Plasma/Applet -i "$OUT/$id" >/dev/null 2>&1
   echo "installed $id"
 done
+
+# OSD bridge: plasmashell (only) hands its on-screen displays (volume,
+# brightness, mute, keyboard layout...) to the Dynamic Island. Takes effect when
+# plasmashell is next started by its service:
+#   kquitapp6 plasmashell; systemctl --user start plasma-plasmashell.service
+QML="$HOME/.local/share/frost/qml"
+rm -rf "$QML"; mkdir -p "$QML"; cp -r "$HERE/osd-bridge/qml/." "$QML/"
+DROPIN="$HOME/.config/systemd/user/plasma-plasmashell.service.d"
+mkdir -p "$DROPIN"
+printf '[Service]\nEnvironment=QML_IMPORT_PATH=%%h/.local/share/frost/qml\n' > "$DROPIN/frost-osd.conf"
+systemctl --user daemon-reload 2>/dev/null || true
+echo "installed OSD bridge"

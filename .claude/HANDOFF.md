@@ -7,6 +7,11 @@ re-apply bars + desktop layout with `./desktop.sh` (restarts plasmashell once).
 ## Done and working
 - Frost theme (glass Plasma theme, Frost Dark/Light colours, red accent #F21D43, Kvantum, Aurorae
   window frame with buttons on the right, edges stretched), `install.sh` / `revert.sh`.
+  Window buttons (2026-11-19, user's pick "A Glyphs" from rendered mockups): thin − □ × in soft text
+  colour, 28x22, a faint rounded square on hover, close solid red on hover (`button_svg` in build.py).
+  Applying decoration changes: copy build/aurorae/themes to ~/.local/share/aurorae/themes and
+  `qdbus6 org.kde.KWin /KWin reconfigure`; windows that keep the old look get it after the decoration
+  library is switched to Breeze and back (kwinrc org.kde.kdecoration2 library + reconfigure).
 - Fonts: Rufscript (UI), JetBrains Mono (code). SDDM login theme `sddm/frost` (installed via `system-install.sh`).
 - Lock screen: not themeable in Plasma 6 (left stock, uses Rufscript).
 - Desktop cards (bento layout, `desktop.sh`): chronos, weather, focus, devices, music, observatory,
@@ -49,6 +54,10 @@ Backups of the panel config (appletsrc + plasmashellrc) in `~/.local/share/glass
   Pause / Cancel on a real transfer, charger / low battery / Bluetooth / DND banners.
 
 ## Possible follow-ups
+- The window decoration's top corners show no shadow (slightly paler squares at both top corners;
+  Spectacle's active-window capture shows them white). Pre-existing; making the radial corner
+  gradients objectBoundingBox didn't change it, so the cause is likely how KWin/Aurorae cuts the
+  shadow from the decoration, not the SVG.
 - Calendar feeds with TZID times (Google calendars) are read as local time, and RRULE repeats in feeds
   are ignored (only the first date shows). The current feeds use UTC times, so they're right.
 - Volume / brightness changes as island HUD banners (replacing Plasma's OSD).
@@ -89,3 +98,16 @@ Backups of the panel config (appletsrc + plasmashellrc) in `~/.local/share/glass
   widget owns org.freedesktop.Notifications and JobViewServer there; plain plasmawindowed can't
   (plasmashell owns them). A fake job: JobViewServer.requestView + JobViewV2.setPercent/terminate,
   from a client that stays connected (python3-dbus); busctl/qdbus jobs end when the caller exits.
+
+## 2026-11-19 late session (uncommitted)
+- Done: island volume/brightness HUD via OSD bridge (widgets/osd-bridge, QML_IMPORT_PATH drop-in for
+  plasma-plasmashell.service only; start plasmashell with `systemctl --user start plasma-plasmashell.service`),
+  banner pop sound (sounds/pop.wav, silent in DND), charger detection via AC adapter, theme-aware
+  Style.qml (light cards), dock glass follows colour scheme, daynight.sh (light|dark|auto|on|off|status;
+  timer not enabled yet), Obsidian prompt (extras/shell/frost-prompt.bash, sourced from ~/.bashrc),
+  kitty JetBrains Mono + Nerd Font symbol_map. Verified: HUD volume + brightness, pop sound, light mode.
+- Installed but not yet loaded: island charger fix + whiter light cards (need one plasmashell restart).
+- Done (2026-11-19): Frost cursor theme, `extras/cursors/` (build_cursors.py + install.sh, applied:
+  kcminputrc cursorTheme=Frost-cursors, size unchanged 30; previous theme saved in
+  ~/.local/share/glass-theme/cursor-before-frost; `install.sh --revert`). Must live in ~/.icons
+  (plasma-apply-cursortheme doesn't scan ~/.local/share/icons). Verified live in a screenshot.

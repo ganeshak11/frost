@@ -101,20 +101,20 @@ PlasmoidItem {
             property string icon
             property string mutedIcon: icon
             radius: width / 2
-            color: Qt.rgba(1, 1, 1, 0.07)
+            color: st.faint
             border.color: st.border
             clip: true
             Rectangle {
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
                 height: Math.max(sl.width, parent.height * sl.value)
                 radius: sl.radius
-                color: sl.muted ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(242/255, 242/255, 245/255, 0.9)
+                color: sl.muted ? st.subtle : st.fill
                 Behavior on height { enabled: !root.dragging; NumberAnimation { duration: 180 } }
             }
             Text {
                 anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 10 }
                 text: sl.muted ? "off" : Math.round(sl.value * 100)
-                color: sl.value > 0.88 && !sl.muted ? "#1a1a1f" : st.muted
+                color: sl.value > 0.88 && !sl.muted ? st.textOnFill : st.muted
                 font.family: st.mono; font.pixelSize: 11
             }
             MouseArea {
@@ -133,7 +133,7 @@ PlasmoidItem {
                 anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: 13 }
                 width: 20; height: 20; isMask: true
                 source: sl.muted ? sl.mutedIcon : sl.icon
-                color: !sl.muted ? "#1a1a1f" : st.text
+                color: !sl.muted ? st.textOnFill : st.text
                 MouseArea {
                     anchors.fill: parent; anchors.margins: -6
                     cursorShape: Qt.PointingHandCursor
@@ -153,7 +153,7 @@ PlasmoidItem {
             property bool on: false
             signal hit()
             radius: height / 2
-            color: on ? st.accent : (pm.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.07))
+            color: on ? st.accent : (pm.containsMouse ? st.hover : st.faint)
             border.color: on ? "transparent" : st.border
             scale: pm.pressed ? 0.97 : 1
             Behavior on color { ColorAnimation { duration: 150 } }
@@ -164,10 +164,10 @@ PlasmoidItem {
                 Rectangle {
                     Layout.preferredWidth: pl.height - 10; Layout.preferredHeight: pl.height - 10
                     radius: width / 2
-                    color: pl.on ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.08)
-                    Kirigami.Icon { anchors.centerIn: parent; width: 16; height: 16; isMask: true; color: "white"; source: pl.icon }
+                    color: pl.on ? Qt.rgba(1, 1, 1, 0.22) : st.faint
+                    Kirigami.Icon { anchors.centerIn: parent; width: 16; height: 16; isMask: true; color: pl.on ? st.textOnAccent : st.text; source: pl.icon }
                 }
-                Text { text: card.compact ? pl.shortLabel : pl.label; color: "white"; font.pixelSize: 13; elide: Text.ElideRight; Layout.fillWidth: true }
+                Text { text: card.compact ? pl.shortLabel : pl.label; color: pl.on ? st.textOnAccent : st.text; font.pixelSize: 13; elide: Text.ElideRight; Layout.fillWidth: true }
                 Text { visible: !card.compact; text: pl.sub; color: pl.on ? Qt.rgba(1, 1, 1, 0.85) : st.muted; font.pixelSize: 11 }
             }
             MouseArea { id: pm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: pl.hit() }

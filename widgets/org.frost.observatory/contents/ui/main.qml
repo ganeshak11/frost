@@ -118,6 +118,7 @@ PlasmoidItem {
             Canvas {
                 id: graph
                 Connections { target: root; function onTick() { graph.requestPaint() } }
+                Connections { target: st; function onLightChanged() { graph.requestPaint() } }
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 onPaint: {
@@ -139,7 +140,7 @@ PlasmoidItem {
                             ctx.fillStyle = fill; ctx.fill()
                         }
                     }
-                    line(root.upHist, "rgba(242,242,245,0.55)", null)
+                    line(root.upHist, st.light ? "rgba(29,29,34,0.55)" : "rgba(242,242,245,0.55)", null)
                     line(root.downHist, "#F21D43", "rgba(242,29,67,0.15)")
                 }
             }

@@ -181,7 +181,7 @@ PlasmoidItem {
                 spacing: 3
                 Repeater {
                     model: Math.min(3, di.dots)
-                    Rectangle { width: 4; height: 4; radius: 2; color: di.activeApp ? st.accent : Qt.rgba(1, 1, 1, 0.75) }
+                    Rectangle { width: 4; height: 4; radius: 2; color: di.activeApp ? st.accent : st.text; opacity: di.activeApp ? 1 : 0.75 }
                 }
             }
             PlasmaCore.ToolTipArea {

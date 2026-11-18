@@ -33,6 +33,9 @@ quit_shell() {
   done
   echo "plasmashell keeps running; config left unchanged" >&2; exit 1
 }
+# Start it through its service, so it gets the Frost OSD bridge (QML_IMPORT_PATH
+# set by widgets/install-widgets.sh for plasma-plasmashell.service only).
+start_shell() { systemctl --user start plasma-plasmashell.service 2>/dev/null || (setsid kstart plasmashell >/dev/null 2>&1 &); }
 
 read -r top dock apps clip island cont sw sh ids <<<"$(qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript '
 // ---- bars
@@ -148,7 +151,7 @@ txt = "".join(h + "\n" + b for h, b in secs)
 open(path, "w").write(txt)
 PY
 then
-  (setsid kstart plasmashell >/dev/null 2>&1 &)
+  start_shell
   exit 1
 fi
 # Dock translucent, so its bar and the popups it opens are glass (the theme
@@ -168,6 +171,6 @@ for line in open(path).read().split("\n"):
 open(path, "w").write("\n".join(out))
 PY
 rm -f ~/.cache/ksvg-elements ~/.cache/plasma_theme_Frost*.kcache 2>/dev/null || true   # pick up theme changes
-(setsid kstart plasmashell >/dev/null 2>&1 &)
+start_shell
 echo "island panel $top, dock panel $dock (apps $apps, clipboard $clip)"
 echo "desktop $cont: chronos=$chronos devices=$dev weather=$wx focus=$focus observatory=$obs agenda=$cal controls=$ctl music=$music"

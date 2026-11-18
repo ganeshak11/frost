@@ -145,7 +145,7 @@ PlasmoidItem {
                     Rectangle {
                         readonly property bool on: Plasmoid.configuration.profile === modelData
                         implicitWidth: lbl.implicitWidth + 16; implicitHeight: 20; radius: 10
-                        color: on ? st.accentSoft : (pm.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent")
+                        color: on ? st.accentSoft : (pm.containsMouse ? st.faint : "transparent")
                         border.color: on ? st.accent : st.border
                         Text { id: lbl; anchors.centerIn: parent; text: modelData; color: parent.on ? st.accent : st.muted; font.pixelSize: 11 }
                         MouseArea { id: pm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.applyProfile(modelData) }

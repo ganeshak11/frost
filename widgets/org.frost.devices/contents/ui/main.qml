@@ -52,7 +52,7 @@ PlasmoidItem {
 
             Text { text: "CONNECTED ECOSYSTEM"; color: c.muted; font.pixelSize: 11; font.letterSpacing: 2.5 }
 
-            component Dot: Rectangle { property bool on; width: 7; height: 7; radius: 3.5; color: on ? c.accent : Qt.rgba(1, 1, 1, 0.25) }
+            component Dot: Rectangle { property bool on; width: 7; height: 7; radius: 3.5; color: on ? c.accent : c.subtle }
             component Name: Text { color: c.text; font.pixelSize: 14; Layout.preferredWidth: 130; elide: Text.ElideRight }
             component Info: Text { color: c.muted; font.family: c.mono; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight; horizontalAlignment: Text.AlignRight }
 

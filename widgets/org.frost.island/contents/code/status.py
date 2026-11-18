@@ -15,6 +15,13 @@ if bat:
     rd = lambda f: open(os.path.join(bat, f)).read().strip()
     try: out["battery"] = {"pct": int(rd("capacity")), "status": rd("status")}
     except Exception: pass
+    # charger plugged in? Ask the adapter: a full battery's status flips between
+    # "Full", "Charging" and "Not charging" on some laptops
+    for ps in glob.glob("/sys/class/power_supply/*"):
+        try:
+            if open(os.path.join(ps, "type")).read().strip() == "Mains" and out["battery"]:
+                out["battery"]["ac"] = open(os.path.join(ps, "online")).read().strip() == "1"
+        except Exception: pass
 
 try:
     sources = {s["index"]: s["name"] for s in json.loads(run("pactl", "-f", "json", "list", "sources", "short") or "[]")}

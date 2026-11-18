@@ -12,6 +12,9 @@
 // Click the pill to expand it: full music player, big focus timer, or (when
 // idle) date, battery, devices and your latest notifications. It collapses
 // when the pointer leaves it.
+// Volume, brightness, mute and other on-screen displays slide out of the pill
+// as a level bar (through the Frost OSD bridge, widgets/osd-bridge), and new
+// banners make a soft sound unless Do Not Disturb is on.
 import QtQuick
 import QtQuick.Window
 import QtQuick.Layouts
@@ -99,7 +102,7 @@ PlasmoidItem {
         if (firstStatus) { firstStatus = false; return }
         const b = s.battery, ob = old.battery
         if (b && ob) {
-            const plugged = (x) => x.status === "Charging" || x.status === "Full"
+            const plugged = (x) => x.ac !== undefined ? x.ac : x.status !== "Discharging"
             if (plugged(b) && !plugged(ob)) banner({ icon: "battery-charging", title: "Charging", value: b.pct + "%", tint: "#4ade80", battery: b.pct })
             else if (!plugged(b) && plugged(ob)) banner({ icon: "battery-full", title: "On battery", value: b.pct + "%", battery: b.pct })
             if (!plugged(b) && b.pct <= 20 && ob.pct > 20) banner({ icon: "battery-caution", title: "Low battery", value: b.pct + "%", tint: accent, battery: b.pct })
@@ -231,7 +234,11 @@ PlasmoidItem {
         isOpen = false
         bannerTimer.interval = current.urgent ? 10000 : 4500
         bannerTimer.restart()
+        if (!dnd) exec.connectSource(soundCmd)
     }
+    // a soft pop for each banner (none during Do Not Disturb)
+    readonly property string soundFile: Qt.resolvedUrl("../sounds/pop.wav").toString().replace("file://", "")
+    readonly property string soundCmd: "(pw-play --volume=0.6 '" + soundFile + "' || paplay '" + soundFile + "') >/dev/null 2>&1 &"
     Timer { id: bannerTimer; interval: 4500; onTriggered: if (!popArea.hovered) root.nextBanner(); else restart() }
 
     property bool isOpen: false
@@ -239,13 +246,31 @@ PlasmoidItem {
     readonly property string primary: musicActive ? "music" : jobActive ? "job" : focusActive ? "focus" : "idle"
     readonly property string secondary: primary === "music" ? (jobActive ? "job" : focusActive ? "focus" : "")
                                       : primary === "job" && focusActive ? "focus" : ""
-    readonly property string mode: current ? "banner" : isOpen ? "expanded" : "compact"
+    // ---- level bar for volume, brightness and other on-screen displays ---------
+    property var hud: null                 // {icon, value (-1 = text only), max, text}
+    function showHud(icon, value, maxValue, text) {
+        hud = { icon: icon || "", value: value, max: maxValue > 0 ? maxValue : 100, text: text || "" }
+        hudTimer.restart()
+    }
+    Timer { id: hudTimer; interval: 1600; onTriggered: root.hud = null }
+    onHudChanged: if (hud) bannerTimer.stop(); else if (current) bannerTimer.restart()   // a banner waits its turn
+    // Plasma's OSDs arrive through the bridge's OsdBus; the island still loads without it
+    Component.onCompleted: {
+        try {
+            const c = Qt.createQmlObject('import QtQuick; import org.frost.osd; Connections { property var island; target: OsdBus; '
+                                       + 'function onShown(icon, value, maxValue, text) { island.showHud(icon, value, maxValue, text) } }', root, "osdbridge")
+            c.island = root
+        } catch (e) { console.log("Dynamic Island: no OSD bridge, Plasma shows its own OSD") }
+    }
+
+    readonly property string mode: hud ? "hud" : current ? "banner" : isOpen ? "expanded" : "compact"
 
     // sizes per state
     readonly property size compactSize: primary === "music" ? Qt.size(232, pillH) : primary === "focus" ? Qt.size(196, pillH)
                                         : primary === "job" ? Qt.size(220, pillH)
                                         : Qt.size(charging || micInUse ? 150 : 118, pillH)
-    readonly property size targetSize: mode === "banner" ? Qt.size(current.body ? 420 : 340, current.body ? 84 : 64)
+    readonly property size targetSize: mode === "hud" ? Qt.size(300, 40)
+                                     : mode === "banner" ? Qt.size(current.body ? 420 : 340, current.body ? 84 : 64)
                                      : mode === "expanded" ? (primary === "music" ? Qt.size(440, 176) : primary === "focus" ? Qt.size(360, 150)
                                                             : primary === "job" ? Qt.size(400, 150) : Qt.size(420, 124 + histH))
                                      : compactSize
@@ -446,7 +471,31 @@ PlasmoidItem {
                 Item {
                     id: content
                     anchors.fill: parent
-                    opacity: Math.min(1, Math.max(0, (blob.height - root.pillH - 6) / 20))
+                    opacity: Math.min(1, Math.max(0, (blob.height - root.pillH - 2) / Math.max(1, root.targetSize.height - root.pillH - 2)))
+
+                    // level bar (volume, brightness...) or a short text (muted, layout...)
+                    RowLayout {
+                        visible: root.mode === "hud"
+                        anchors { fill: parent; leftMargin: 14; rightMargin: 16 }
+                        spacing: 12
+                        readonly property bool level: !!root.hud && root.hud.value >= 0
+                        Kirigami.Icon { Layout.preferredWidth: 18; Layout.preferredHeight: 18; isMask: true; color: root.text
+                                        source: root.hud ? root.hud.icon : "" }
+                        Rectangle {
+                            visible: parent.level
+                            Layout.fillWidth: true; height: 6; radius: 3; color: Qt.rgba(1, 1, 1, 0.15)
+                            readonly property real frac: root.hud && root.hud.value > 0 ? Math.min(1, root.hud.value / root.hud.max) : 0
+                            Rectangle {
+                                height: 6; radius: 3; width: parent.width * parent.frac
+                                color: root.hud && root.hud.value > 100 ? root.accent : "white"     // red above 100% volume
+                                Behavior on width { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+                            }
+                        }
+                        Text { visible: !parent.level; text: root.hud ? root.hud.text : ""; color: root.text; font.pixelSize: 13
+                               elide: Text.ElideRight; Layout.fillWidth: true }
+                        Text { visible: parent.level; text: root.hud ? root.hud.value + "%" : ""; color: root.text
+                               font.family: root.mono; font.pixelSize: 13; Layout.preferredWidth: 40; horizontalAlignment: Text.AlignRight }
+                    }
 
                     // banner
                     RowLayout {

@@ -117,16 +117,17 @@ PlasmoidItem {
                 Canvas {
                     id: ring
                     anchors.fill: parent
+                    Connections { target: st; function onLightChanged() { ring.requestPaint() } }
                     property real progress: root.total > 0 ? 1 - root.remaining / root.total : 0
                     onProgressChanged: requestPaint()
                     onPaint: {
                         const c = getContext("2d"); c.reset()
                         const r = width / 2 - 5, cx = width / 2, cy = height / 2
                         c.lineWidth = 5; c.lineCap = "round"
-                        c.strokeStyle = "rgba(255,255,255,0.08)"
+                        c.strokeStyle = st.light ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.08)"
                         c.beginPath(); c.arc(cx, cy, r, 0, 2 * Math.PI); c.stroke()
                         if (progress > 0) {
-                            c.strokeStyle = root.isFocus ? "#F21D43" : "rgba(242,242,245,0.85)"
+                            c.strokeStyle = root.isFocus ? "#F21D43" : st.light ? "rgba(29,29,34,0.85)" : "rgba(242,242,245,0.85)"
                             c.beginPath(); c.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + progress * 2 * Math.PI); c.stroke()
                         }
                     }
@@ -169,10 +170,10 @@ PlasmoidItem {
                         property bool primary: false
                         signal hit()
                         implicitWidth: t.implicitWidth + 24; implicitHeight: 28; radius: 14
-                        color: primary ? (bm.containsMouse ? "#ff3358" : st.accent) : (bm.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.06))
+                        color: primary ? (bm.containsMouse ? "#ff3358" : st.accent) : (bm.containsMouse ? st.hover : st.faint)
                         border.color: primary ? "transparent" : st.border
                         scale: bm.pressed ? 0.97 : 1
-                        Text { id: t; anchors.centerIn: parent; text: b.label; color: "white"; font.pixelSize: 13 }
+                        Text { id: t; anchors.centerIn: parent; text: b.label; color: b.primary ? st.textOnAccent : st.text; font.pixelSize: 13 }
                         MouseArea { id: bm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: b.hit() }
                     }
                     Btn { label: root.phase === "idle" ? "Start" : root.running ? "Pause" : "Resume"; primary: true; onHit: root.toggle() }
@@ -233,18 +234,18 @@ PlasmoidItem {
                             Rectangle {
                                 readonly property bool sel: root.cfg.project === modelData
                                 implicitWidth: prow.implicitWidth + 20; implicitHeight: 26; radius: 13
-                                color: sel ? st.accent : Qt.rgba(1, 1, 1, 0.07)
+                                color: sel ? st.accent : st.faint
                                 border.color: sel ? "transparent" : st.border
                                 RowLayout {
                                     id: prow; anchors.centerIn: parent; spacing: 6
                                     Text {
-                                        text: modelData; color: "white"; font.pixelSize: 12
+                                        text: modelData; color: sel ? st.textOnAccent : st.text; font.pixelSize: 12
                                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                                     enabled: root.phase === "idle"
                                                     onClicked: { root.cfg.project = modelData; editor.visible = false } }
                                     }
                                     Text {
-                                        text: "×"; color: xm.containsMouse ? "white" : Qt.rgba(1, 1, 1, 0.6); font.pixelSize: 14
+                                        text: "×"; color: xm.containsMouse ? (sel ? st.textOnAccent : st.text) : (sel ? Qt.rgba(1, 1, 1, 0.7) : st.muted); font.pixelSize: 14
                                         MouseArea { id: xm; anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                                     onClicked: root.removeProject(modelData) }
                                     }

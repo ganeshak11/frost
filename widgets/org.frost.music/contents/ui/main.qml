@@ -101,7 +101,7 @@ PlasmoidItem {
             signal hit()
             Layout.preferredWidth: big ? 48 : 34; Layout.preferredHeight: Layout.preferredWidth
             radius: width / 2
-            color: big ? (ma.containsMouse ? "#ff3358" : st.accent) : (ma.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent")
+            color: big ? (ma.containsMouse ? "#ff3358" : st.accent) : (ma.containsMouse ? st.hover : "transparent")
             scale: ma.pressed ? 0.92 : 1
             Behavior on scale { NumberAnimation { duration: 90 } }
             Kirigami.Icon {
@@ -169,7 +169,7 @@ PlasmoidItem {
                                 height: Math.max(width, parent.height * Math.min(100, root.bars[index] || 0) / 100)
                                 radius: width / 2
                                 gradient: Gradient {
-                                    GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.85) }
+                                    GradientStop { position: 0; color: st.fill }
                                     GradientStop { position: 1; color: "#F21D43" }
                                 }
                                 opacity: root.playing ? 0.95 : 0.35
@@ -184,7 +184,7 @@ PlasmoidItem {
                     Layout.fillWidth: true; spacing: 8
                     Text { text: root.clock(root.player ? root.player.position : 0); color: st.muted; font.family: st.mono; font.pixelSize: 10 }
                     Rectangle {
-                        Layout.fillWidth: true; height: 4; radius: 2; color: Qt.rgba(1, 1, 1, 0.12)
+                        Layout.fillWidth: true; height: 4; radius: 2; color: st.hover
                         readonly property real ratio: root.player && root.player.length > 0 ? root.player.position / root.player.length : 0
                         Rectangle { width: parent.width * Math.min(1, parent.ratio); height: parent.height; radius: 2; color: st.accent }
                         MouseArea {

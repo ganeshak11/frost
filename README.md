@@ -19,6 +19,7 @@ a set of native Plasma desktop widgets, a Mac-style dock and a Dynamic Island.
 | `extras/kitty/` | Kitty colours, glass and tabs; included from `~/.config/kitty/kitty.conf` |
 | `extras/firefox/` | `userChrome.css` / `userContent.css` + `user.js` for the Firefox profile |
 | `extras/system-boot.sh` | **sudo.** Plymouth boot splash and GRUB menu theme (`plymouth/`, `grub/`). `--undo` restores the previous ones |
+| `extras/cursors/` | Frost cursor theme: `build_cursors.py` draws 23 cursors (dark body, white outline, red badges, animated red spinner) as Plasma SVG cursors + Xcursor files with 81 alias names, inheriting Breeze for the rest. `install.sh` installs to `~/.icons/Frost-cursors` and applies it; `--revert` goes back |
 
 ## Dock and Dynamic Island
 
