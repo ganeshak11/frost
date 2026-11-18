@@ -419,7 +419,7 @@ def kvantum(name, p, base: Path):
     cfg = (src / f"{p['kv']}.kvconfig").read_text()
     sets = {
         "translucent_windows": "true", "blurring": "true", "popup_blurring": "true",
-        "reduce_window_opacity": "30" if name == "Dark" else "25",
+        "reduce_window_opacity": "30" if name == "Dark" else "8",
         "reduce_menu_opacity": "30", "menu_blur_radius": "6", "tooltip_blur_radius": "6",
         "menu_shadow_depth": "6", "tooltip_shadow_depth": "4", "animate_states": "false",
         "opaque": "kaffeine,kmplayer,subtitlecomposer,kdenlive,vlc,smplayer,smplayer2,avidemux,avidemux2_qt4,"
@@ -433,7 +433,9 @@ def kvantum(name, p, base: Path):
             cfg = cfg.replace("[%General]\n", f"[%General]\n{k}={v}\n", 1)
     colors = {
         "window.color": hx(p["window"]), "inactive.window.color": hx(p["window"]),
-        "base.color": hx(p["view"], 0xdd), "inactive.base.color": hx(p["view"], 0xdd),
+        # light mode: solid file/list views, otherwise dark windows behind show through
+        "base.color": hx(p["view"], 0xdd if name == "Dark" else 0xff),
+        "inactive.base.color": hx(p["view"], 0xdd if name == "Dark" else 0xff),
         "alt.base.color": hx(p["alt"]), "inactive.alt.base.color": hx(p["alt"]),
         "button.color": hx(p["button"]), "tooltip.base.color": hx(p["tooltip"]),
         "highlight.color": hx(p["accent"]), "inactive.highlight.color": hx(mix(p["accent"], p["window"], .35)),
@@ -445,6 +447,8 @@ def kvantum(name, p, base: Path):
     }
     for k, v in colors.items():
         cfg = re.sub(rf"^{re.escape(k)}=.*$", f"{k}={v}", cfg, flags=re.M)
+    if name == "Light":
+        cfg = re.sub(r"^transparent_dolphin_view=.*$", "transparent_dolphin_view=false", cfg, flags=re.M)
     cfg = re.sub(r"^comment=.*$", f"comment=Frost {name}: translucent, blurred, based on {p['kv']} by Tsu Jan", cfg, flags=re.M)
     write(base / f"Frost{name}.kvconfig", cfg)
     shutil.copy(src / f"{p['kv']}.svg", base / f"Frost{name}.svg")

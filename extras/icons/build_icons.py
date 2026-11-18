@@ -20,6 +20,9 @@ PALETTE = {                      # Papirus blue -> Frost red
 }
 BLUE = re.compile(r"^(folder|user)-blue")
 CONTEXTS = ("places", "mimetypes")
+# Only icons that are named as folders. Generic names like "network" or "desktop"
+# must stay Papirus: Plasma falls back to them for e.g. "network-wireless".
+FOLDER_NAMES = re.compile(r"^(folder|user-|inode-directory|gtk-directory|stock_folder|stock_open|insync-folder|gnome-home)")
 THEMES = {"Frost": ("Papirus-Dark", "breeze-dark"), "Frost-Light": ("Papirus-Light", "breeze")}
 
 
@@ -48,7 +51,7 @@ def build(name, base, fallback):
             for entry in sorted(os.listdir(cdir)):
                 path = cdir / entry
                 real = Path(os.path.realpath(path))
-                if not entry.endswith(".svg") or not BLUE.match(real.name):
+                if not entry.endswith(".svg") or not BLUE.match(real.name) or not FOLDER_NAMES.match(entry):
                     continue
                 if BLUE.match(entry) or re.match(r"^(folder|user)-(red|green|yellow|orange|violet|grey|black|brown|cyan|"
                                                   r"magenta|pink|teal|white|indigo|nordic|deeporange|bluegrey|paleorange|"

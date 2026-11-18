@@ -118,3 +118,9 @@ Backups of the panel config (appletsrc + plasmashellrc) in `~/.local/share/glass
   install.sh / daynight.sh switch icons Frost <-> Frost-Light and set LookAndFeelPackage per mode.
   After changing icons without plasma-changeicons noticing, broadcast with
   `dbus-send --session --type=signal /KIconLoader org.kde.KIconLoader.iconChanged int32:0`.
+- Done (2026-11-19 ~01:25): plasmashell restarted (island charger fix + light cards loaded); light-mode
+  tour: icon theme now only overrides folder-named icons (generic `network`/`desktop` overrides made
+  Plasma fall back to a red folder for `network-wireless`); FrostLight Kvantum: windows 8% translucent,
+  solid file views (`transparent_dolphin_view=false`, opaque base colour); light Global Theme preview
+  (`previews/light`). Automatic day/night is ON (`daynight.sh on`, frost-daynight.timer every 10 min).
+  Possible follow-up: Kvantum light's focus frame is still Mojave blue (seen around Dolphin's current row).
