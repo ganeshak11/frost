@@ -1,0 +1,21 @@
+{
+  "KPlugin": {
+    "Id": "org.frost.spotlight",
+    "Name": "Spotlight",
+    "Description": "A centred search bar (the Meta key) for apps, windows, settings, calculator, units, files and web shortcuts, using Plasma's own search runners",
+    "Icon": "search",
+    "Category": "Utilities",
+    "Authors": [
+      {
+        "Name": "ganeshak11"
+      }
+    ],
+    "License": "GPL-2.0+",
+    "Version": "1.0"
+  },
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "X-Plasma-Provides": [
+    "org.kde.plasma.launchermenu"
+  ]
+}

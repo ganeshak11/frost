@@ -140,3 +140,18 @@ Backups of the panel config (appletsrc + plasmashellrc) in `~/.local/share/glass
   Plasma needs to notice) + frost-dnd.desktop registered in kglobalaccel ([services] group).
   Live-verified: timer view + chips + buttons (the user clicked them), download pill + Downloaded
   banner, camera dot, DND shortcut action.
+- 2026-11-19 ~02:00: Spotlight (widgets/org.frost.spotlight): Milou.ResultsModel (KRunner's runners)
+  in a PlasmaCore.Dialog (Normal, frameless, stays on top, hides when it loses focus), 1 px applet in the
+  top panel, global shortcut Meta+Space (desktop.sh adds it). Verified standalone with a test query
+  (grouped results, highlight, opaque card). The applet declares X-Plasma-Provides
+  org.kde.plasma.launchermenu, so the Meta key alone (KWin modifier-only -> PlasmaShell.activateLauncherMenu)
+  opens it instead of falling back to KRunner; KRunner keeps Alt+Space / Alt+F2. Verified live via
+  activateLauncherMenu after a restart. Gotchas: plasmashell caches an applet's QML for the life of the
+  process (re-adding the applet doesn't reload code: restart plasmashell); Plasma restores `expanded`
+  at start, so ignore activation for the first 3 s; console.log from plasmashell isn't in the journal
+  (debug with `touch` markers via an executable DataSource). When re-adding an applet, clear its globalShortcut
+  first and unregister old "activate widget N" names. Note: an autostart service
+  "Plasma Dynamic Island Collector" from the old third-party island still exists (check / remove).
+- Spotlight shortcut, final (user's call): only the Meta key on its own (launcher). Meta+Space opens
+  KRunner on this system even though no KRunner shortcut lists it; the user said to leave it. The
+  applet has no global shortcut (removed from desktop.sh too).

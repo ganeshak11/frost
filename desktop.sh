@@ -67,9 +67,14 @@ dock.location = "bottom"; dock.floating = true; dock.hiding = "autohide";
 dock.lengthMode = "fit"; dock.alignment = "center";
 dock.height = 94;                        // 24 px clear band (magnified icons) + the 70 px bar
 
-for (const w of top.widgets()) if (w.type != "org.frost.island") w.remove();
+for (const w of top.widgets()) if (!["org.frost.island", "org.frost.spotlight"].includes(w.type)) w.remove();
 const island = top.widgets().find(w => w.type == "org.frost.island") || top.addWidget("org.frost.island");
 if (!island.globalShortcut) island.globalShortcut = "Meta+Alt+I";   // open / close the island
+// Spotlight: a 1 px widget beside the island; it's the "launcher", so the Meta
+// key on its own opens its search bar (Meta+Space stays with KRunner)
+const spot = top.widgets().find(w => w.type == "org.frost.spotlight") || top.addWidget("org.frost.spotlight");
+top.currentConfigGroup = ["General"];
+top.writeConfig("AppletOrder", [island.id, spot.id].join(";"));
 top.location = "top"; top.height = 40; top.hiding = "windowsgobelow"; top.floating = false;
 top.lengthMode = "fit"; top.alignment = "center"; top.offset = 0;
 // ---- cards
