@@ -1,0 +1,14 @@
+{
+  "KPlugin": {
+    "Id": "org.frost.island",
+    "Name": "Dynamic Island",
+    "Description": "A live activity pill at the top of the screen: music, focus timer, notifications, charging, Bluetooth, Do Not Disturb, microphone in use; click to expand",
+    "Icon": "preferences-desktop-notification",
+    "Category": "Windows and Tasks",
+    "Authors": [{ "Name": "ganeshak11" }],
+    "License": "GPL-2.0+",
+    "Version": "1.0"
+  },
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

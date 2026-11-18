@@ -166,9 +166,87 @@ def frame_svg(r, opacity, edge, margin, w=10):
             + STYLE + "".join(out) + "</svg>\n")
 
 
+def panel_svg():
+    """Panel background for the Frost bars.
+
+    - default / top panels: fully transparent, no margins, no blur mask. The
+      Dynamic Island draws its own pill.
+    - bottom panels (south-*): a clear band, then the dock's glass bar, with a
+      matching blur mask (mask-south-*) so only the bar is blurred.
+    - thick-* hints: the gap between the bar's edge and the icons in it.
+      The dock's 24 px top band keeps its icons in the bar; the magnified ones
+      grow up into the band. Small panels (the island's) cap these paddings.
+    """
+    out = []
+    t = 'fill="#000" fill-opacity="0"'
+
+    def nine(pre, ox, r, w, fill, rim=None, band=0):
+        """9-slice rounded frame at x offset ox; `band` px of clear space above it
+        (part of the top row's elements, so the frame itself starts lower)."""
+        S, a = 2 * r + w, r - 1
+        X = lambda v: v + ox
+        Y = lambda v: v + band
+        corners = {   # name: (box, fill path, rim path)
+            "topleft": ((0, 0, r, r + band),
+                        f"M{X(0)},{Y(r)} A{r},{r} 0 0 1 {X(r)},{Y(0)} L{X(r)},{Y(r)} Z",
+                        f"M{X(0)},{Y(r)} A{r},{r} 0 0 1 {X(r)},{Y(0)} V{Y(1)} A{a},{a} 0 0 0 {X(1)},{Y(r)} Z"),
+            "topright": ((r + w, 0, r, r + band),
+                         f"M{X(r+w)},{Y(0)} A{r},{r} 0 0 1 {X(S)},{Y(r)} L{X(r+w)},{Y(r)} Z",
+                         f"M{X(r+w)},{Y(0)} A{r},{r} 0 0 1 {X(S)},{Y(r)} H{X(S-1)} A{a},{a} 0 0 0 {X(r+w)},{Y(1)} Z"),
+            "bottomleft": ((0, Y(r + w), r, r),
+                           f"M{X(0)},{Y(r+w)} L{X(r)},{Y(r+w)} L{X(r)},{Y(S)} A{r},{r} 0 0 1 {X(0)},{Y(r+w)} Z",
+                           f"M{X(r)},{Y(S)} A{r},{r} 0 0 1 {X(0)},{Y(r+w)} H{X(1)} A{a},{a} 0 0 0 {X(r)},{Y(S-1)} Z"),
+            "bottomright": ((r + w, Y(r + w), r, r),
+                            f"M{X(r+w)},{Y(r+w)} L{X(S)},{Y(r+w)} A{r},{r} 0 0 1 {X(r+w)},{Y(S)} Z",
+                            f"M{X(S)},{Y(r+w)} A{r},{r} 0 0 1 {X(r+w)},{Y(S)} V{Y(S-1)} A{a},{a} 0 0 0 {X(S-1)},{Y(r+w)} Z"),
+        }
+        edges = {     # name: (box, fill rect, rim path)
+            "top": ((r, 0, w, r + band), (r, Y(0), w, r), f"M{X(r)},{Y(0)} H{X(r+w)} V{Y(1)} H{X(r)} Z"),
+            "bottom": ((r, Y(r + w), w, r), (r, Y(r + w), w, r), f"M{X(r)},{Y(S-1)} H{X(r+w)} V{Y(S)} H{X(r)} Z"),
+            "left": ((0, Y(r), r, w), (0, Y(r), r, w), f"M{X(0)},{Y(r)} H{X(1)} V{Y(r+w)} H{X(0)} Z"),
+            "right": ((r + w, Y(r), r, w), (r + w, Y(r), r, w), f"M{X(S-1)},{Y(r)} H{X(S)} V{Y(r+w)} H{X(S-1)} Z"),
+        }
+        box = lambda x, y, ww, hh: f'<rect x="{X(x)}" y="{y}" width="{ww}" height="{hh}" {t}/>'
+        rimp = lambda d: f'<path d="{d}" {rim}/>' if rim else ""
+        for n, (bx, d, rd) in corners.items():
+            out.append(f'<g id="{pre}{n}">{box(*bx)}' + (f'<path d="{d}" {fill}/>' if fill else "") + rimp(rd) + "</g>")
+        for n, (bx, (x, y, ww, hh), rd) in edges.items():
+            out.append(f'<g id="{pre}{n}">{box(*bx)}' + (f'<rect x="{X(x)}" y="{y}" width="{ww}" height="{hh}" {fill}/>' if fill else "") + rimp(rd) + "</g>")
+        out.append(f'<g id="{pre}center">{box(r, Y(r), w, w)}' + (f'<rect x="{X(r)}" y="{Y(r)}" width="{w}" height="{w}" {fill}/>' if fill else "") + "</g>")
+        return S
+
+    def hints(pre, ox, top, bottom, left, right):
+        for i, (side, m) in enumerate((("top", top), ("bottom", bottom), ("left", left), ("right", right))):
+            ww, hh = (0.01, m) if side in ("top", "bottom") else (m, 0.01)
+            out.append(f'<rect id="{pre}hint-{side}-margin" x="{ox + i * 2}" y="60" width="{ww or 0.01}" height="{hh or 0.01}" fill="none"/>')
+
+    glass = 'fill="#121216" fill-opacity="0.5"'
+    rim = 'fill="#ffffff" opacity="0.13"'      # element opacity: stays faint in the opaque variant too
+    nine("", 0, 4, 2, None)                                   # transparent
+    hints("", 0, 0, 0, 0, 0)
+    # Its blur mask is a single pixel per corner: with no mask at all Plasma
+    # blurs the whole panel, which shows as a grey box around the island.
+    # (a pixel in every corner piece: a panel at a screen edge doesn't draw the
+    # pieces along that edge)
+    nine("mask-", 230, 4, 2, None)
+    for i, (px, py) in enumerate(((230, 0), (239, 0), (230, 9), (239, 9))):   # topleft, topright, bottomleft, bottomright
+        out[-9 + i] = out[-9 + i].replace("</g>", f'<rect x="{px}" y="{py}" width="1" height="1" fill="#000"/></g>')
+    # the dock: a 24 px clear band on top (room for the magnified icons), then the glass bar
+    nine("south-", 20, 20, 10, glass, rim, band=24)
+    nine("mask-south-", 80, 20, 10, 'fill="#000"', band=24)
+    nine("thick-", 140, 4, 2, None)
+    hints("thick-", 140, 30, 6, 8, 8)                         # icons 10 px inside the bar, below the band
+    for pre in ("", "south-"):
+        out.append(f'<rect id="{pre}hint-stretch-borders" x="200" y="60" width="1" height="1" fill="none"/>')
+    for n in ("topleft", "top", "topright", "left", "center", "right", "bottomleft", "bottom", "bottomright"):
+        out.append(f'<rect id="shadow-{n}" x="210" y="0" width="4" height="4" {t}/>')
+    return ('<svg xmlns="http://www.w3.org/2000/svg" width="250" height="100" viewBox="0 0 250 100">'
+            + STYLE + "".join(out) + "</svg>\n")
+
+
 def plasma_theme(base: Path):
     files = {
-        "widgets/panel-background.svg": frame_svg(14, 0.18, 0.18, 4),
+        "widgets/panel-background.svg": panel_svg(),
         "dialogs/background.svg": frame_svg(14, 0.26, 0.20, 10),
         "widgets/background.svg": frame_svg(18, 0.48, 0.12, 12),
         "widgets/tooltip.svg": frame_svg(10, 0.45, 0.20, 8),
@@ -241,6 +319,9 @@ def decoration_svg():
             body.append(f'<g id="decoration-{st}{n}" transform="translate({x},{y})">{inner}</g>')
             x += tw + 10
         y += 80
+    # stretch the edge tiles instead of repeating them (repeating leaves seams
+    # that show up as faint stripes in the shadow)
+    body.append('<rect id="hint-stretch-borders" x="0" y="0" width="1" height="1" fill="none"/>')
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{x}" height="{y}">'
             f'<defs>{"".join(defs)}</defs>{"".join(body)}</svg>\n')
 
@@ -362,6 +443,7 @@ def kvantum(name, p, base: Path):
 
 # ------------------------------------------------------- Global themes (LnF)
 def lookandfeel(name, p, base: Path):
+    shutil.copytree(ROOT / "splash", base / "contents/splash")   # login splash
     write(base / "metadata.json", json.dumps({
         "KPlugin": {"Id": f"org.frost.{name.lower()}", "Name": f"Frost {name}",
                     "Description": "Frosted glass with a top bar and dock", "Authors": [{"Name": "ganeshak11"}],

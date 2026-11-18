@@ -103,7 +103,7 @@ PlasmoidItem {
         // narrow card: ring on top, controls underneath, per-project bars hidden
         readonly property bool compact: width < 380
         Layout.minimumWidth: 256; Layout.preferredWidth: 272
-        Layout.minimumHeight: 230; Layout.preferredHeight: 256
+        Layout.minimumHeight: 224; Layout.preferredHeight: 240
         Style { id: st }
 
         GridLayout {
@@ -112,7 +112,7 @@ PlasmoidItem {
             columnSpacing: 16; rowSpacing: 6
 
             Item {
-                Layout.preferredWidth: card.compact ? 112 : 132; Layout.preferredHeight: Layout.preferredWidth
+                Layout.preferredWidth: card.compact ? 104 : 132; Layout.preferredHeight: Layout.preferredWidth
                 Layout.alignment: Qt.AlignCenter
                 Canvas {
                     id: ring

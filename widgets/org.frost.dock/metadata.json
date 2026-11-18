@@ -1,0 +1,18 @@
+{
+  "KPlugin": {
+    "Id": "org.frost.dock",
+    "Name": "Frost Dock",
+    "Description": "The app row of a Mac-style dock: pinned and running apps, gentle magnification, running dots, bounce on launch, drag to reorder, right-click menu",
+    "Icon": "preferences-desktop-icons",
+    "Category": "Windows and Tasks",
+    "Authors": [
+      {
+        "Name": "ganeshak11"
+      }
+    ],
+    "License": "GPL-2.0+",
+    "Version": "1.0"
+  },
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Frost
+Description=Black screen, a pulsing red dot and a thin red progress line
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/frost
+ScriptFile=/usr/share/plymouth/themes/frost/frost.script

@@ -43,7 +43,7 @@ PlasmoidItem {
 
     fullRepresentation: GlassCard {
         Layout.minimumWidth: 520; Layout.preferredWidth: 560
-        Layout.minimumHeight: 150; Layout.preferredHeight: 176
+        Layout.minimumHeight: 144; Layout.preferredHeight: 160
         Style { id: c }
 
         ColumnLayout {

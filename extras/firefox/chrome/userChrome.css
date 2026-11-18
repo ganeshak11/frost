@@ -1,0 +1,83 @@
+/* Frost / Obsidian Glass for Firefox.
+   Black glass toolbars, rounded tabs with a red underline on the active tab,
+   a rounded address bar that glows red when focused. Delete this file (and
+   the matching line in user.js) to go back. */
+
+:root {
+  --frost-bg: #0b0b0e;
+  --frost-panel: #121216;
+  --frost-raised: #1c1c22;
+  --frost-border: rgba(255, 255, 255, 0.10);
+  --frost-text: #ECECF1;
+  --frost-muted: #9A9AA6;
+  --frost-accent: #F21D43;
+
+  --lwt-accent-color: var(--frost-bg) !important;
+  --lwt-text-color: var(--frost-text) !important;
+  --toolbar-bgcolor: var(--frost-bg) !important;
+  --toolbar-color: var(--frost-text) !important;
+  --toolbar-field-background-color: var(--frost-panel) !important;
+  --toolbar-field-focus-background-color: var(--frost-raised) !important;
+  --toolbar-field-color: var(--frost-text) !important;
+  --toolbar-field-focus-color: var(--frost-text) !important;
+  --toolbar-field-border-color: var(--frost-border) !important;
+  --toolbar-field-focus-border-color: var(--frost-accent) !important;
+  --focus-outline-color: var(--frost-accent) !important;
+  --tab-selected-bgcolor: var(--frost-raised) !important;
+  --tab-selected-textcolor: #ffffff !important;
+  --tab-border-radius: 10px !important;
+  --arrowpanel-background: var(--frost-panel) !important;
+  --arrowpanel-color: var(--frost-text) !important;
+  --arrowpanel-border-color: var(--frost-border) !important;
+  --arrowpanel-border-radius: 14px !important;
+  --sidebar-background-color: var(--frost-bg) !important;
+  --urlbarView-highlight-background: var(--frost-accent) !important;
+  --button-primary-bgcolor: var(--frost-accent) !important;
+  --button-primary-hover-bgcolor: #ff3358 !important;
+  --link-color: #ff6b86 !important;
+}
+
+#navigator-toolbox {
+  background: var(--frost-bg) !important;
+  border-bottom: 1px solid var(--frost-border) !important;
+}
+#TabsToolbar, #nav-bar, #PersonalToolbar, #titlebar {
+  background: transparent !important;
+}
+
+/* tabs */
+.tab-background {
+  border-radius: 10px !important;
+  margin-block: 5px !important;
+}
+.tabbrowser-tab:not([selected]):hover .tab-background {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+.tab-background[selected] {
+  background: var(--frost-raised) !important;
+  box-shadow: inset 0 -2px 0 var(--frost-accent), 0 0 0 1px var(--frost-border) !important;
+}
+.tabbrowser-tab:not([selected]) .tab-label { color: var(--frost-muted) !important; }
+.tab-throbber[busy]::before, .tab-icon-overlay[soundplaying] { fill: var(--frost-accent) !important; }
+
+/* address bar */
+#urlbar-background {
+  border-radius: 12px !important;
+  border: 1px solid var(--frost-border) !important;
+}
+#urlbar[focused] > #urlbar-background {
+  border-color: var(--frost-accent) !important;
+  box-shadow: 0 0 0 1px var(--frost-accent), 0 0 14px rgba(242, 29, 67, 0.25) !important;
+}
+
+/* menus and popups */
+menupopup, panel {
+  --panel-background: var(--frost-panel) !important;
+  --panel-color: var(--frost-text) !important;
+  --panel-border-color: var(--frost-border) !important;
+  --panel-border-radius: 12px !important;
+}
+menuitem[_moz-menuactive], menu[_moz-menuactive] {
+  background-color: var(--frost-accent) !important;
+  color: #ffffff !important;
+}

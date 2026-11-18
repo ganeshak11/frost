@@ -1,0 +1,62 @@
+# Frost boot splash: black, a softly pulsing red dot in the middle and a thin
+# red line underneath that fills with the real boot progress.
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+
+W = Window.GetWidth();
+H = Window.GetHeight();
+LINE = 320;
+
+dot = Image("dot.png");
+dot_sprite = Sprite(dot);
+dot_sprite.SetPosition(W / 2 - dot.GetWidth() / 2, H * 0.48 - dot.GetHeight() / 2, 2);
+
+track_sprite = Sprite(Image("track.png").Scale(LINE, 2));
+track_sprite.SetPosition(W / 2 - LINE / 2, H * 0.62, 1);
+
+bar = Image("bar.png");
+bar_sprite = Sprite();
+bar_sprite.SetPosition(W / 2 - LINE / 2, H * 0.62, 2);
+
+progress = 0;
+tick = 0;
+
+fun refresh() {
+    tick++;
+    dot_sprite.SetOpacity(0.55 + 0.45 * Math.Sin(tick / 14));
+    w = Math.Int(LINE * progress);
+    if (w < 8) w = 8;
+    bar_sprite.SetImage(bar.Scale(w, 2));
+}
+Plymouth.SetRefreshFunction(refresh);
+
+fun boot_progress(duration, p) {
+    if (p > progress) progress = p;
+}
+Plymouth.SetBootProgressFunction(boot_progress);
+
+# messages (e.g. disk checks) in small grey text near the bottom
+message_sprite = Sprite();
+fun show_message(text) {
+    img = Image.Text(text, 0.6, 0.6, 0.65);
+    message_sprite.SetImage(img);
+    message_sprite.SetPosition(W / 2 - img.GetWidth() / 2, H * 0.85, 3);
+}
+Plymouth.SetMessageFunction(show_message);
+
+# password prompt (only used if a disk is ever encrypted)
+prompt_sprite = Sprite();
+fun display_password(prompt, bullets) {
+    s = prompt + "  ";
+    for (i = 0; i < bullets; i++) s += "•";
+    img = Image.Text(s, 1, 1, 1);
+    prompt_sprite.SetImage(img);
+    prompt_sprite.SetPosition(W / 2 - img.GetWidth() / 2, H * 0.72, 3);
+    prompt_sprite.SetOpacity(1);
+}
+fun display_normal() { prompt_sprite.SetOpacity(0); }
+Plymouth.SetDisplayPasswordFunction(display_password);
+Plymouth.SetDisplayNormalFunction(display_normal);
+
+fun quit() { bar_sprite.SetImage(bar.Scale(LINE, 2)); }
+Plymouth.SetQuitFunction(quit);

@@ -89,7 +89,7 @@ PlasmoidItem {
         // tall narrow card: sliders on top, pills in two columns below
         readonly property bool compact: width < 380
         Layout.minimumWidth: 272; Layout.preferredWidth: 288
-        Layout.minimumHeight: 380; Layout.preferredHeight: 416
+        Layout.minimumHeight: 352; Layout.preferredHeight: 368
         Style { id: st }
 
         // tall rounded slider that fills from the bottom
@@ -181,7 +181,7 @@ PlasmoidItem {
             RowLayout {
                 Layout.fillHeight: !card.compact
                 Layout.fillWidth: card.compact
-                Layout.preferredHeight: card.compact ? 190 : -1
+                Layout.preferredHeight: card.compact ? 172 : -1
                 spacing: 8
                 VSlider { Layout.preferredWidth: 44; Layout.fillWidth: card.compact; Layout.fillHeight: true; kind: "vol"; value: root.vol; muted: root.volMuted
                           icon: "audio-volume-high"; mutedIcon: "audio-volume-muted" }

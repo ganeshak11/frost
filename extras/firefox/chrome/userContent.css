@@ -1,0 +1,10 @@
+/* Frost / Obsidian Glass: black new-tab and home page with a red accent. */
+@-moz-document url("about:newtab"), url("about:home"), url("about:blank") {
+  body, html { background-color: #0b0b0e !important; }
+  :root {
+    --newtab-background-color: #0b0b0e !important;
+    --newtab-background-color-secondary: #16161b !important;
+    --newtab-primary-action-background: #F21D43 !important;
+    --newtab-text-primary-color: #ECECF1 !important;
+  }
+}

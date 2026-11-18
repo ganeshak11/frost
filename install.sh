@@ -70,15 +70,21 @@ else
   echo "Neither Rufscript nor Inter is installed: run 'sudo ./system-install.sh' first."
 fi
 
+# Login splash (Frost look-and-feel package)
+kw ksplashrc KSplash Engine KSplashQML
+kw ksplashrc KSplash Theme "org.frost.${MODE}"
+
 # GTK apps (Firefox, etc.) follow the Plasma colours through Breeze-GTK
 if command -v gsettings >/dev/null; then
   gsettings set org.gnome.desktop.interface gtk-theme Breeze || true
   gsettings set org.gnome.desktop.interface color-scheme "prefer-$MODE" || true
 fi
 
-# 5. Panels: slimmer top bar, compact dock (layout and widgets untouched)
+# 5. Panels: slimmer top bar, compact dock (layout and widgets untouched).
+#    The Frost bars from ./panels.sh (island / dock) size themselves: left alone.
 qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript '
 for (const p of panels()) {
+  if (p.widgets().some(w => ["org.frost.island", "org.frost.dock"].includes(w.type))) continue;
   if (p.location == "top") p.height = 30;
   if (p.location == "bottom") { p.height = 56; p.floating = true; }
 }' >/dev/null || true

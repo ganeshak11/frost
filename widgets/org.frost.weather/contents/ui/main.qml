@@ -68,7 +68,7 @@ PlasmoidItem {
     fullRepresentation: GlassCard {
         id: card
         Layout.minimumWidth: 256; Layout.preferredWidth: 272
-        Layout.minimumHeight: 230; Layout.preferredHeight: 256
+        Layout.minimumHeight: 224; Layout.preferredHeight: 240
         Style { id: st }
         // narrow card: details go under the temperature instead of beside it
         readonly property bool compact: width < 380

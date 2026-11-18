@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="launchers" type="String"><default>applications:org.kde.dolphin.desktop,applications:kitty.desktop,applications:antigravity-ide.desktop,applications:com.anthropic.Claude.desktop,applications:brave-browser.desktop,applications:firefox_firefox.desktop,applications:code_code.desktop,applications:systemsettings.desktop,applications:org.telegram.desktop._73749282b890c2849159eea7587c6bf8.desktop,applications:android-studio_android-studio.desktop,file:///usr/share/discord/discord.desktop,applications:audacious.desktop,applications:cursor.desktop,applications:org.kde.discover.desktop</default></entry>
+    <entry name="iconSize" type="Int"><default>50</default></entry>
+    <entry name="magnification" type="Double"><default>1.3</default></entry>
+  </group>
+</kcfg>
