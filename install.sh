@@ -4,6 +4,7 @@
 set -euo pipefail
 MODE=${1:-dark}
 case "$MODE" in dark) V=Dark ;; light) V=Light ;; *) echo "usage: $0 [dark|light]"; exit 1 ;; esac
+ICONS=Frost; [ "$V" = Light ] && ICONS=Frost-Light
 HERE=$(cd "$(dirname "$0")" && pwd)
 DATA=~/.local/share; CFG=~/.config; STATE=$DATA/glass-theme
 kw() { kwriteconfig6 --file "$1" --group "$2" --key "$3" "$4"; }
@@ -19,7 +20,8 @@ if [ ! -f "$STATE/LATEST_BACKUP" ]; then
   echo "$BK" > "$STATE/LATEST_BACKUP"
 fi
 
-# 2. Install files
+# 2. Install files (icon themes are Papirus with red folders, built here)
+[ -d ~/.local/share/icons/Papirus-Dark ] && "$HERE/extras/icons/install.sh" >/dev/null
 mkdir -p $DATA/plasma $DATA/aurorae/themes $DATA/color-schemes $CFG/Kvantum
 cp -r "$HERE/build/plasma/."          $DATA/plasma/
 cp -r "$HERE/build/aurorae/themes/."  $DATA/aurorae/themes/
@@ -44,7 +46,7 @@ kwriteconfig6 --file kdeglobals --group General --key AccentColor --delete
 kwriteconfig6 --file kdeglobals --group General --key accentColorFromWallpaper --delete
 plasma-apply-colorscheme "Frost$V" >/dev/null
 plasma-apply-desktoptheme Frost >/dev/null
-kw kdeglobals Icons Theme "Papirus-$V"
+kw kdeglobals Icons Theme "$ICONS"
 kw kwinrc org.kde.kdecoration2 library org.kde.kwin.aurorae.v2
 kw kwinrc org.kde.kdecoration2 theme "__aurorae__svg__Frost$V"
 kw kwinrc org.kde.kdecoration2 ButtonsOnLeft ""
@@ -73,6 +75,7 @@ fi
 # Login splash (Frost look-and-feel package)
 kw ksplashrc KSplash Engine KSplashQML
 kw ksplashrc KSplash Theme "org.frost.${MODE}"
+kw kdeglobals KDE LookAndFeelPackage "org.frost.${MODE}"   # shown as the active Global Theme
 
 # GTK apps (Firefox, etc.) follow the Plasma colours through Breeze-GTK
 if command -v gsettings >/dev/null; then
@@ -104,5 +107,5 @@ for g in $(grep -oE '^\[PlasmaViews\]\[Panel [0-9]+\]$' $CFG/plasmashellrc | gre
 done
 rm -f ~/.cache/ksvg-elements ~/.cache/plasma_theme_Frost*.kcache 2>/dev/null || true
 (setsid kstart plasmashell >/dev/null 2>&1 &)
-/usr/lib/x86_64-linux-gnu/libexec/plasma-changeicons "Papirus-$V" >/dev/null 2>&1 || true
+/usr/lib/x86_64-linux-gnu/libexec/plasma-changeicons "$ICONS" >/dev/null 2>&1 || true
 echo "Frost $V applied. Apps that were already open pick up the new style after a restart."

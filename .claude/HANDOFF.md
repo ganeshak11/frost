@@ -111,3 +111,10 @@ Backups of the panel config (appletsrc + plasmashellrc) in `~/.local/share/glass
   kcminputrc cursorTheme=Frost-cursors, size unchanged 30; previous theme saved in
   ~/.local/share/glass-theme/cursor-before-frost; `install.sh --revert`). Must live in ~/.icons
   (plasma-apply-cursortheme doesn't scan ~/.local/share/icons). Verified live in a screenshot.
+- Done (2026-11-19): Frost icon themes (`extras/icons/`, Papirus + red folders, user picked the bright
+  red option A over deep red / obsidian), applied (kdeglobals Icons Theme=Frost, gsettings icon-theme).
+  Global themes org.frost.dark/light now set icons + cursor and have previews (`previews/dark`; no light
+  preview yet). kdeglobals LookAndFeelPackage=org.frost.dark so System Settings shows Frost Dark.
+  install.sh / daynight.sh switch icons Frost <-> Frost-Light and set LookAndFeelPackage per mode.
+  After changing icons without plasma-changeicons noticing, broadcast with
+  `dbus-send --session --type=signal /KIconLoader org.kde.KIconLoader.iconChanged int32:0`.

@@ -20,6 +20,8 @@ a set of native Plasma desktop widgets, a Mac-style dock and a Dynamic Island.
 | `extras/firefox/` | `userChrome.css` / `userContent.css` + `user.js` for the Firefox profile |
 | `extras/system-boot.sh` | **sudo.** Plymouth boot splash and GRUB menu theme (`plymouth/`, `grub/`). `--undo` restores the previous ones |
 | `extras/cursors/` | Frost cursor theme: `build_cursors.py` draws 23 cursors (dark body, white outline, red badges, animated red spinner) as Plasma SVG cursors + Xcursor files with 81 alias names, inheriting Breeze for the rest. `install.sh` installs to `~/.icons/Frost-cursors` and applies it; `--revert` goes back |
+| `extras/icons/` | Frost icon themes: `build_icons.py` makes Frost (dark) and Frost-Light from Papirus with ~1,400 folder icons recoloured to the Frost red; everything else is inherited from Papirus. `install.sh` installs them (also run by the main `install.sh`) |
+| `previews/` | Screenshots used as the Global Theme previews in System Settings |
 
 ## Dock and Dynamic Island
 

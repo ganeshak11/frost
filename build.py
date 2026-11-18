@@ -19,7 +19,7 @@ PAL = {
         text=(236, 236, 241), dim=(150, 152, 162), accent=(242, 29, 67),
         link=(90, 160, 255), visited=(176, 128, 230),
         neg=(255, 92, 92), neu=(255, 176, 46), pos=(52, 199, 89),
-        icons="Papirus-Dark", kv="KvMojave",
+        icons="Frost", kv="KvMojave",
     ),
     "Light": dict(
         window=(236, 236, 241), view=(255, 255, 255), alt=(245, 245, 248), button=(255, 255, 255),
@@ -27,7 +27,7 @@ PAL = {
         text=(29, 29, 31), dim=(112, 112, 122), accent=(10, 112, 240),
         link=(10, 102, 220), visited=(130, 70, 200),
         neg=(220, 50, 50), neu=(210, 130, 0), pos=(30, 150, 60),
-        icons="Papirus-Light", kv="KvMojaveLight",
+        icons="Frost-Light", kv="KvMojaveLight",
     ),
 }
 
@@ -455,7 +455,7 @@ def lookandfeel(name, p, base: Path):
     shutil.copytree(ROOT / "splash", base / "contents/splash")   # login splash
     write(base / "metadata.json", json.dumps({
         "KPlugin": {"Id": f"org.frost.{name.lower()}", "Name": f"Frost {name}",
-                    "Description": "Frosted glass with a top bar and dock", "Authors": [{"Name": "ganeshak11"}],
+                    "Description": "Obsidian Glass: Dynamic Island, Frost Dock, glass cards and the Wednesday red accent", "Authors": [{"Name": "ganeshak11"}],
                     "License": "GPL-2.0+", "Version": VERSION, "Category": "Plasma Look And Feel"},
         "X-Plasma-APIVersion": "2", "KPackageStructure": "Plasma/LookAndFeel"}, indent=2))
     write(base / "contents/defaults", f"""[kdeglobals][KDE]
@@ -477,7 +477,13 @@ ButtonsOnLeft=
 ButtonsOnRight=IAX
 BorderSize=None
 BorderSizeAuto=false
+
+[kcminputrc][Mouse]
+cursorTheme=Frost-cursors
 """)
+    prev = ROOT / "previews" / name.lower()                # screenshots shown in System Settings
+    if prev.exists():
+        shutil.copytree(prev, base / "contents/previews")
 
 
 def main():

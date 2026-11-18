@@ -65,13 +65,15 @@ current() { [ "$(kreadconfig6 --file kdeglobals --group General --key ColorSchem
 
 apply() {
   local m=$1 V; [ "$m" = light ] && V=Light || V=Dark
+  local ICONS=Frost; [ "$V" = Light ] && ICONS=Frost-Light
   plasma-apply-colorscheme "Frost$V" >/dev/null 2>&1 || true
   kw Kvantum/kvantum.kvconfig General theme "Frost$V"
-  kw kdeglobals Icons Theme "Papirus-$V"
-  /usr/lib/x86_64-linux-gnu/libexec/plasma-changeicons "Papirus-$V" >/dev/null 2>&1 || true
+  kw kdeglobals Icons Theme "$ICONS"
+  /usr/lib/x86_64-linux-gnu/libexec/plasma-changeicons "$ICONS" >/dev/null 2>&1 || true
   kw kwinrc org.kde.kdecoration2 theme "__aurorae__svg__Frost$V"
   qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
   kw ksplashrc KSplash Theme "org.frost.$m"
+  kw kdeglobals KDE LookAndFeelPackage "org.frost.$m"     # shown as the active Global Theme
   command -v gsettings >/dev/null && gsettings set org.gnome.desktop.interface color-scheme "prefer-$m" || true
   echo "Frost $V"
 }
