@@ -1,0 +1,14 @@
+{
+  "KPlugin": {
+    "Id": "org.frost.focus",
+    "Name": "Focus",
+    "Description": "Pomodoro focus timer with projects, break reminders, daily stats and optional Do Not Disturb, on Obsidian glass",
+    "Icon": "chronometer",
+    "Category": "Utilities",
+    "Authors": [{ "Name": "ganeshak11" }],
+    "License": "GPL-2.0+",
+    "Version": "1.0"
+  },
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

@@ -1,0 +1,14 @@
+{
+  "KPlugin": {
+    "Id": "org.frost.devices",
+    "Name": "Device Ecosystem",
+    "Description": "This laptop's network, your KDE Connect phone (battery, ring, send file) and Tailscale peers, on Obsidian glass",
+    "Icon": "network-workgroup",
+    "Category": "System Information",
+    "Authors": [{ "Name": "ganeshak11" }],
+    "License": "GPL-2.0+",
+    "Version": "1.0"
+  },
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

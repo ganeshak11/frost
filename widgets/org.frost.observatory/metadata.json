@@ -1,0 +1,14 @@
+{
+  "KPlugin": {
+    "Id": "org.frost.observatory",
+    "Name": "System Observatory",
+    "Description": "CPU, memory, GPU, disk and a live network graph on Obsidian glass",
+    "Icon": "utilities-system-monitor",
+    "Category": "System Information",
+    "Authors": [{ "Name": "ganeshak11" }],
+    "License": "GPL-2.0+",
+    "Version": "1.0"
+  },
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

@@ -1,0 +1,14 @@
+{
+  "KPlugin": {
+    "Id": "org.frost.weather",
+    "Name": "Weather Intelligence",
+    "Description": "Current weather, hourly and 5-day forecast with rain alerts, on Obsidian glass (Open-Meteo, no account needed)",
+    "Icon": "weather-few-clouds",
+    "Category": "Environment and Weather",
+    "Authors": [{ "Name": "ganeshak11" }],
+    "License": "GPL-2.0+",
+    "Version": "1.0"
+  },
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

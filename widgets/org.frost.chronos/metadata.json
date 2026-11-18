@@ -1,0 +1,14 @@
+{
+  "KPlugin": {
+    "Id": "org.frost.chronos",
+    "Name": "Chronos",
+    "Description": "Day, date, time and a greeting on Obsidian glass",
+    "Icon": "preferences-system-time",
+    "Category": "Date and Time",
+    "Authors": [{ "Name": "ganeshak11" }],
+    "License": "GPL-2.0+",
+    "Version": "1.0"
+  },
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

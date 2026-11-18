@@ -1,0 +1,14 @@
+{
+  "KPlugin": {
+    "Id": "org.frost.agenda",
+    "Name": "Calendar & Agenda",
+    "Description": "Monday-first month view with event dots, holidays and an upcoming agenda; add your own events or sync calendar feeds (iCal links)",
+    "Icon": "view-calendar-agenda",
+    "Category": "Date and Time",
+    "Authors": [{ "Name": "ganeshak11" }],
+    "License": "GPL-2.0+",
+    "Version": "1.0"
+  },
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

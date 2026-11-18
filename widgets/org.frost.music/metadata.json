@@ -1,0 +1,14 @@
+{
+  "KPlugin": {
+    "Id": "org.frost.music",
+    "Name": "Music",
+    "Description": "Now playing with artwork, live beat bars, progress and controls; appears only while something plays",
+    "Icon": "media-playback-start",
+    "Category": "Multimedia",
+    "Authors": [{ "Name": "ganeshak11" }],
+    "License": "GPL-2.0+",
+    "Version": "1.0"
+  },
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0"
+}
