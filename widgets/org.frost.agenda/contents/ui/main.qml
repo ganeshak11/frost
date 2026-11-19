@@ -8,7 +8,8 @@
 // Calendar feeds (Google "secret iCal address", holidays, fixtures) are set in
 // the widget settings, one per line: "<link> [#colour] [Name] [+Word ...]";
 // +Words keep only events whose title contains one of them. Refreshed every
-// 30 minutes. Reminders go out as notifications (shown by the Dynamic Island):
+// 30 minutes; the last good copy of each feed is saved, so feeds still show
+// offline, and a failed download is retried every minute. Reminders go out as notifications (shown by the Dynamic Island):
 // 10 minutes before and at the start of timed events, at 9:00 for all-day ones.
 import QtQuick
 import QtQuick.Layouts
@@ -26,7 +27,6 @@ PlasmoidItem {
     property date today: new Date()
     property date shown: new Date(today.getFullYear(), today.getMonth(), 1)
     property date selected: today
-    property var feedEvents: []          // [{date:"2026-11-18", time:"09:30", title, holiday, color, source}]
     // your own events: {id, date, time, title, repeat: ""|weekly|monthly|yearly, kind: ""|birthday|anniversary|important}
     readonly property var localEvents: { try { return JSON.parse(Plasmoid.configuration.events) } catch (e) { return [] } }
 
@@ -144,8 +144,8 @@ PlasmoidItem {
         }
         return out
     }
-    function parseIcs(text, feed) {
-        const holiday = /holiday/i.test(decodeURIComponent(feed.url))
+    // a feed's events as saved: [{date:"2026-11-18", time:"09:30", title}], 2 months back to 12 ahead
+    function parseIcs(text) {
         const lines = text.replace(/\r\n[ \t]/g, "").split(/\r?\n/)
         const out = [], lo = new Date(), hi = new Date()
         lo.setMonth(lo.getMonth() - 2); hi.setMonth(hi.getMonth() + 12)
@@ -153,10 +153,8 @@ PlasmoidItem {
         for (const l of lines) {
             if (l === "BEGIN:VEVENT") ev = {}
             else if (l === "END:VEVENT" && ev) {
-                const title = ev.title || "(no title)"
-                if (ev.start && ev.start >= lo && ev.start <= hi && (!feed.keep.length || feed.keep.some(w => title.toLowerCase().includes(w))))
-                    out.push({ date: key(ev.start), time: ev.allDay ? "" : Qt.formatTime(ev.start, "HH:mm"), title: title,
-                               holiday: holiday, color: feed.color, source: feed.name || (holiday ? "Holidays" : "Calendar") })
+                if (ev.start && ev.start >= lo && ev.start <= hi)
+                    out.push({ date: key(ev.start), time: ev.allDay ? "" : Qt.formatTime(ev.start, "HH:mm"), title: ev.title || "(no title)" })
                 ev = null
             } else if (ev && l.startsWith("SUMMARY")) ev.title = l.slice(l.indexOf(":") + 1).replace(/\\([,;\\])/g, "$1")
             else if (ev && l.startsWith("DTSTART")) {
@@ -171,22 +169,58 @@ PlasmoidItem {
         }
         return out
     }
-    function syncFeeds() {
-        const feeds = feedList()
-        let pending = feeds.length, collected = []
-        if (!pending) { feedEvents = []; return }
-        for (const f of feeds) {
-            const xhr = new XMLHttpRequest()
-            xhr.onreadystatechange = () => {
-                if (xhr.readyState !== XMLHttpRequest.DONE) return
-                if (xhr.status === 200) collected = collected.concat(parseIcs(xhr.responseText, f))
-                if (--pending === 0) root.feedEvents = collected
-            }
-            xhr.open("GET", f.url); xhr.send()
-        }
+    // the feed's colour, name, holiday flag and +Words are applied when shown, so
+    // editing them works offline too
+    function decorate(f, evs) {
+        let link = f.url
+        try { link = decodeURIComponent(link) } catch (e) {}
+        const holiday = /holiday/i.test(link)
+        return evs.filter(e => !f.keep.length || f.keep.some(w => e.title.toLowerCase().includes(w)))
+            .map(e => ({ date: e.date, time: e.time, title: e.title, holiday: holiday, color: f.color,
+                         source: f.name || (holiday ? "Holidays" : "Calendar") }))
     }
-    Timer { interval: 30 * 60000; running: true; repeat: true; triggeredOnStart: true; onTriggered: root.syncFeeds() }
-    Connections { target: Plasmoid.configuration; function onFeedsChanged() { root.syncFeeds() } }
+    // last good download of each feed, by link, saved in the config
+    readonly property var savedFeeds: { try { return JSON.parse(Plasmoid.configuration.feedCache) } catch (e) { return {} } }
+    readonly property var feedEvents: {    // [{date, time, title, holiday, color, source}]
+        const saved = savedFeeds
+        return [].concat(...feedList().map(f => decorate(f, saved[f.url] || [])))
+    }
+    function saveFeed(url, evs) {
+        const links = feedList().map(f => f.url)
+        if (!links.includes(url)) return                 // removed while it downloaded
+        const next = {}
+        for (const u of links) if (savedFeeds[u]) next[u] = savedFeeds[u]   // drops removed feeds
+        next[url] = evs
+        const s = JSON.stringify(next)
+        if (s !== Plasmoid.configuration.feedCache) Plasmoid.configuration.feedCache = s
+    }
+
+    property var feedsFailing: []        // links whose last download failed (offline, or the link is down)
+    property var inflight: ({})          // link -> download in progress
+    function fetchFeed(f) {
+        const busy = inflight[f.url]
+        if (busy && Date.now() - busy.started < 90000) return
+        const req = { xhr: new XMLHttpRequest(), started: Date.now() }
+        inflight[f.url] = req
+        req.xhr.onreadystatechange = () => {
+            if (req.xhr.readyState !== XMLHttpRequest.DONE) return
+            // a Wi-Fi login page also answers 200, so it has to look like a calendar
+            const ok = req.xhr.status === 200 && req.xhr.responseText.indexOf("BEGIN:VCALENDAR") >= 0
+            if (ok) root.saveFeed(f.url, root.parseIcs(req.xhr.responseText))   // a failure keeps the saved copy
+            if (root.inflight[f.url] !== req) return      // a newer try for this link took over
+            delete root.inflight[f.url]
+            const rest = root.feedsFailing.filter(u => u !== f.url)
+            root.feedsFailing = ok ? rest : rest.concat([f.url])
+        }
+        req.xhr.open("GET", f.url); req.xhr.send()
+    }
+    function syncFeeds(onlyFailing) {
+        for (const f of feedList())
+            if (!onlyFailing || feedsFailing.includes(f.url)) fetchFeed(f)
+    }
+    Timer { interval: 30 * 60000; running: true; repeat: true; triggeredOnStart: true; onTriggered: root.syncFeeds(false) }
+    Timer { interval: 60000; running: root.feedsFailing.length > 0; repeat: true; onTriggered: root.syncFeeds(true) }
+    Connections { target: Plasmoid.configuration; function onFeedsChanged() { root.feedsFailing = []; root.syncFeeds(false) } }
     Timer { interval: 60000; running: true; repeat: true; onTriggered: { const n = new Date(); if (n.getDate() !== root.today.getDate()) root.today = n } }
 
     // ---- reminders (as notifications, so the Dynamic Island shows them) --------

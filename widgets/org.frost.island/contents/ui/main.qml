@@ -716,11 +716,12 @@ PlasmoidItem {
                                 signal hit()
                                 Layout.preferredWidth: 22; Layout.preferredHeight: 22; isMask: true
                                 color: bm.containsMouse ? root.accent : root.text
+                                opacity: enabled ? 1 : 0.3      // greyed when the player can't (e.g. no next track)
                                 MouseArea { id: bm; anchors.fill: parent; anchors.margins: -6; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: parent.hit() }
                             }
-                            Btn { source: "media-skip-backward"; onHit: root.player.Previous() }
+                            Btn { source: "media-skip-backward"; enabled: !!root.player && root.player.canGoPrevious; onHit: root.player.Previous() }
                             Btn { source: root.playing ? "media-playback-pause" : "media-playback-start"; onHit: root.player.PlayPause() }
-                            Btn { source: "media-skip-forward"; onHit: root.player.Next() }
+                            Btn { source: "media-skip-forward"; enabled: !!root.player && root.player.canGoNext; onHit: root.player.Next() }
                         }
                     }
 

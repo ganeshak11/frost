@@ -36,6 +36,17 @@ PlasmoidItem {
         const id = player ? (player.identity || "") : ""
         return id.split("_")[0].replace(/^Mozilla\s+/, "")
     }
+    // Album art. Players hand over a file:// or http(s) URL; snap Firefox writes a
+    // fresh PNG per track to ~/snap/firefox/common/.mozilla/firefox/firefox-mpris/.
+    // If a load fails (file not there yet, network hiccup) try again a few times;
+    // the "#rN" suffix makes Qt skip its cached failure without changing the file.
+    readonly property string artUrl: player ? (player.artUrl || "") : ""
+    property int artTry: 0
+    onArtUrlChanged: artTry = 0
+    readonly property string artSource: artUrl ? artUrl + (artTry > 0 ? "#r" + artTry : "") : ""
+    Timer { id: artRetry; interval: 800; onTriggered: root.artTry++ }
+    function artStatus(s) { if (s === Image.Error && artTry < 4) artRetry.restart() }
+
     function clock(us) {
         const s = Math.max(0, Math.floor((us || 0) / 1000000))
         return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0")
@@ -75,7 +86,8 @@ PlasmoidItem {
         Image {   // the artwork itself, used as a source only
             id: art
             visible: false
-            source: root.player ? root.player.artUrl : ""
+            source: root.artSource
+            onStatusChanged: root.artStatus(status)
             asynchronous: true; cache: true
             fillMode: Image.PreserveAspectCrop
             sourceSize: Qt.size(400, 400)
@@ -103,6 +115,7 @@ PlasmoidItem {
             radius: width / 2
             color: big ? (ma.containsMouse ? "#ff3358" : st.accent) : (ma.containsMouse ? st.hover : "transparent")
             scale: ma.pressed ? 0.92 : 1
+            opacity: enabled ? 1 : 0.3          // greyed when the player can't (e.g. no next track)
             Behavior on scale { NumberAnimation { duration: 90 } }
             Kirigami.Icon {
                 anchors.centerIn: parent
@@ -201,13 +214,20 @@ PlasmoidItem {
                 RowLayout {
                     Layout.alignment: Qt.AlignHCenter
                     spacing: 14
-                    Ctl { icon: "media-playlist-shuffle"; on: !!root.player && root.player.shuffle; onHit: root.player.shuffle = !root.player.shuffle }
-                    Ctl { icon: "media-skip-backward"; onHit: root.player.Previous() }
+                    // shuffle and repeat are three-way (Unknown = the player doesn't support it, e.g. some browsers)
+                    Ctl {
+                        icon: "media-playlist-shuffle"
+                        enabled: !!root.player && root.player.shuffle !== Mpris.ShuffleStatus.Unknown
+                        on: !!root.player && root.player.shuffle === Mpris.ShuffleStatus.On
+                        onHit: root.player.shuffle = root.player.shuffle === Mpris.ShuffleStatus.On ? Mpris.ShuffleStatus.Off : Mpris.ShuffleStatus.On
+                    }
+                    Ctl { icon: "media-skip-backward"; enabled: !!root.player && root.player.canGoPrevious; onHit: root.player.Previous() }
                     Ctl { icon: root.playing ? "media-playback-pause" : "media-playback-start"; big: true; onHit: root.player.PlayPause() }
-                    Ctl { icon: "media-skip-forward"; onHit: root.player.Next() }
+                    Ctl { icon: "media-skip-forward"; enabled: !!root.player && root.player.canGoNext; onHit: root.player.Next() }
                     Ctl {
                         icon: root.player && root.player.loopStatus === Mpris.LoopStatus.Track ? "media-playlist-repeat-song" : "media-playlist-repeat"
-                        on: !!root.player && root.player.loopStatus !== Mpris.LoopStatus.None
+                        enabled: !!root.player && root.player.loopStatus !== Mpris.LoopStatus.Unknown
+                        on: !!root.player && (root.player.loopStatus === Mpris.LoopStatus.Playlist || root.player.loopStatus === Mpris.LoopStatus.Track)
                         onHit: root.player.loopStatus = root.player.loopStatus === Mpris.LoopStatus.None ? Mpris.LoopStatus.Playlist
                                                      : root.player.loopStatus === Mpris.LoopStatus.Playlist ? Mpris.LoopStatus.Track : Mpris.LoopStatus.None
                     }

@@ -256,8 +256,10 @@ PlasmoidItem {
             MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
+                preventStealing: true
                 property real lastSent: 0
                 function at(x) { return x / width }
+                onCanceled: root.dragging = false     // else the levels would never refresh again
                 onPressed: (e) => { root.dragging = true; root.setLevel(hs.kind, at(e.x)) }
                 onPositionChanged: (e) => { if (Date.now() - lastSent > 80) { lastSent = Date.now(); root.setLevel(hs.kind, at(e.x)) } }
                 onReleased: (e) => { root.setLevel(hs.kind, at(e.x)); root.dragging = false }
@@ -289,6 +291,7 @@ PlasmoidItem {
         implicitWidth: 22; implicitHeight: 22
         isMask: true
         color: mbm.containsMouse ? st.accent : st.text
+        opacity: enabled ? 1 : 0.3              // greyed when the player can't (e.g. no next track)
         MouseArea { id: mbm; anchors.fill: parent; anchors.margins: -6; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: mb.hit() }
     }
 
@@ -405,9 +408,9 @@ PlasmoidItem {
                             Text { text: root.player ? (root.player.artist || root.player.identity) : ""; color: st.muted; font.pixelSize: 11
                                    elide: Text.ElideRight; Layout.fillWidth: true; textFormat: Text.PlainText }
                         }
-                        MediaBtn { source: "media-skip-backward"; onHit: root.player.Previous() }
+                        MediaBtn { source: "media-skip-backward"; enabled: !!root.player && root.player.canGoPrevious; onHit: root.player.Previous() }
                         MediaBtn { source: root.playing ? "media-playback-pause" : "media-playback-start"; onHit: root.player.PlayPause() }
-                        MediaBtn { source: "media-skip-forward"; onHit: root.player.Next() }
+                        MediaBtn { source: "media-skip-forward"; enabled: !!root.player && root.player.canGoNext; onHit: root.player.Next() }
                     }
                 }
 

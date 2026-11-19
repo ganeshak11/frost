@@ -34,7 +34,12 @@ PlasmoidItem {
     property real vol: 0;   property bool volMuted: false
     property real mic: 0;   property bool micMuted: false
     property real light: 0; property int lightMax: 1
+    // While a slider is held, and for a moment after a change from here, the poll
+    // must not snap it back to the old value. `dragging` is cleared on release AND
+    // on cancel (the desktop takes the mouse away on press-and-hold to move the
+    // widget); if it were left set, the sliders would never update again.
     property bool dragging: false
+    property double lastSet: 0
     property string listFor: ""      // "wifi" / "bluetooth" while its list covers the card
 
     readonly property string qd: "qdbus6 org.kde.KWin /org/kde/KWin/NightLight org.freedesktop.DBus.Properties.Get org.kde.KWin.NightLight "
@@ -45,11 +50,13 @@ PlasmoidItem {
 
     function setLevel(kind, v) {
         v = Math.max(0, Math.min(1, v))
+        lastSet = Date.now()
         if (kind === "vol") { vol = v; exec.run("wpctl set-volume @DEFAULT_AUDIO_SINK@ " + v.toFixed(2)) }
         else if (kind === "mic") { mic = v; exec.run("wpctl set-volume @DEFAULT_AUDIO_SOURCE@ " + v.toFixed(2)) }
         else { light = v; exec.run(bd + "SetBrightness " + Math.max(1, Math.round(v * lightMax)) + " 0") }
     }
     function toggleMute(kind) {
+        lastSet = Date.now()
         if (kind === "vol") { volMuted = !volMuted; exec.run("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle") }
         else if (kind === "mic") { micMuted = !micMuted; exec.run("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle") }
     }
@@ -62,7 +69,7 @@ PlasmoidItem {
             if (src === root.cmdNight) {
                 const p = out.split(/\s+/); root.nightOn = p[0] === "true" && p[1] !== "true"
             } else if (src === root.cmdLevels) {
-                if (!root.dragging) {
+                if (!root.dragging && Date.now() - root.lastSet > 1200) {
                     const parts = out.split("|").map(x => x.trim())
                     const num = (t) => parseFloat(((t || "").match(/Volume:\s*([\d.]+)/) || [0, 0])[1])
                     root.vol = Math.min(1, num(parts[0])); root.volMuted = /MUTED/.test(parts[0])
@@ -84,7 +91,8 @@ PlasmoidItem {
     }
     Timer { interval: 8000; running: true; repeat: true; triggeredOnStart: true
             onTriggered: { exec.run(root.cmdNight); exec.run(root.cmdTs) } }
-    Timer { interval: 3000; running: true; repeat: true; triggeredOnStart: true; onTriggered: exec.run(root.cmdLevels) }
+    // levels follow changes made elsewhere (keys, earbud buttons, another app, a new default device)
+    Timer { interval: 1500; running: true; repeat: true; triggeredOnStart: true; onTriggered: exec.run(root.cmdLevels) }
     Timer { id: nightCheck; interval: 600; onTriggered: exec.run(root.cmdNight) }
 
     // for testing on its own: `plasmawindowed org.frost.controls frost-test:wifi|bluetooth [frost-shot:/path.png]`
@@ -139,6 +147,7 @@ PlasmoidItem {
             MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
+                preventStealing: true
                 property real lastSent: 0
                 function at(y) { return 1 - y / height }
                 onPressed: (e) => { root.dragging = true; root.setLevel(sl.kind, at(e.y)) }
@@ -146,6 +155,7 @@ PlasmoidItem {
                     if (Date.now() - lastSent > 80) { lastSent = Date.now(); root.setLevel(sl.kind, at(e.y)) }
                 }
                 onReleased: (e) => { root.setLevel(sl.kind, at(e.y)); root.dragging = false }
+                onCanceled: root.dragging = false
                 onWheel: (w) => root.setLevel(sl.kind, sl.value + (w.angleDelta.y > 0 ? 0.05 : -0.05))
             }
             Kirigami.Icon {   // tap to mute

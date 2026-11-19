@@ -1,0 +1,12 @@
+{
+  "KPackageStructure": "KWin/WindowSwitcher",
+  "KPlugin": {
+    "Id": "frost",
+    "Name": "Frost",
+    "Description": "Obsidian Glass window switcher: large live thumbnails on black glass, red selection",
+    "Icon": "preferences-system-windows-switcher-thumbnail-grid",
+    "Authors": [{ "Name": "ganeshak11" }],
+    "License": "GPL"
+  },
+  "X-Plasma-API": "declarativeappletscript"
+}
