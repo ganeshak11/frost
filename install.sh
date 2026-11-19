@@ -20,6 +20,7 @@ fi
 
 # 2. Install files (icon themes are Papirus with red folders, built here)
 [ -d ~/.local/share/icons/Papirus-Dark ] && "$HERE/extras/icons/install.sh" >/dev/null
+"$HERE/extras/lockscreen/install.sh" >/dev/null   # Frost lock screen (from the next login)
 mkdir -p $DATA/plasma $DATA/aurorae/themes $DATA/color-schemes $CFG/Kvantum
 cp -r "$HERE/build/plasma/."          $DATA/plasma/
 cp -r "$HERE/build/aurorae/themes/."  $DATA/aurorae/themes/

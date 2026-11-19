@@ -1,0 +1,16 @@
+{
+  "KPlugin": {
+    "Id": "org.frost.lockscreen",
+    "Name": "Frost Lock Screen",
+    "Description": "Frost's lock screen only (the Frost clock and a glass password card); the desktop keeps using Plasma's own shell",
+    "Authors": [
+      {
+        "Name": "ganeshak11"
+      }
+    ],
+    "License": "GPL-2.0+",
+    "Version": "1.0"
+  },
+  "KPackageStructure": "Plasma/Shell",
+  "X-Plasma-APIVersion": "2"
+}

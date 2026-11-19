@@ -18,4 +18,5 @@ qdbus6 org.kde.KWin /KWin reconfigure >/dev/null || true
 # plasmashell must restart to reload the restored panel layout
 kquitapp6 plasmashell >/dev/null 2>&1 || true
 (setsid kstart plasmashell >/dev/null 2>&1 &)
+"$(dirname "$0")/extras/lockscreen/install.sh" --undo >/dev/null || true
 echo "Reverted. Frost files stay installed (pick them again any time in System Settings)."

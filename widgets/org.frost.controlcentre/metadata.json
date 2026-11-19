@@ -1,0 +1,18 @@
+{
+  "KPlugin": {
+    "Id": "org.frost.controlcentre",
+    "Name": "Control Centre",
+    "Description": "A glass drop-down under the Dynamic Island: Wi-Fi and Bluetooth with network and device lists, Do Not Disturb, Night Light, Tailscale, brightness, volume and what's playing",
+    "Icon": "preferences-system",
+    "Category": "System Information",
+    "Authors": [
+      {
+        "Name": "ganeshak11"
+      }
+    ],
+    "License": "GPL-2.0+",
+    "Version": "1.0"
+  },
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

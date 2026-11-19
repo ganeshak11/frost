@@ -2,6 +2,8 @@
 // microphone, screen brightness; drag or scroll, tap the icon to mute) and
 // rounded pills for Wi-Fi, Bluetooth, Tailscale, Do Not Disturb, Night Light
 // and Power. Power opens Plasma's normal shutdown screen, so it always asks.
+// Wi-Fi and Bluetooth: the round icon turns them on / off, the rest of the pill
+// opens the list of networks / paired devices (click one to connect).
 import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.plasmoid
@@ -33,6 +35,7 @@ PlasmoidItem {
     property real mic: 0;   property bool micMuted: false
     property real light: 0; property int lightMax: 1
     property bool dragging: false
+    property string listFor: ""      // "wifi" / "bluetooth" while its list covers the card
 
     readonly property string qd: "qdbus6 org.kde.KWin /org/kde/KWin/NightLight org.freedesktop.DBus.Properties.Get org.kde.KWin.NightLight "
     readonly property string cmdNight: "echo $(" + qd + "enabled) $(" + qd + "inhibited)"
@@ -83,6 +86,22 @@ PlasmoidItem {
             onTriggered: { exec.run(root.cmdNight); exec.run(root.cmdTs) } }
     Timer { interval: 3000; running: true; repeat: true; triggeredOnStart: true; onTriggered: exec.run(root.cmdLevels) }
     Timer { id: nightCheck; interval: 600; onTriggered: exec.run(root.cmdNight) }
+
+    // for testing on its own: `plasmawindowed org.frost.controls frost-test:wifi|bluetooth [frost-shot:/path.png]`
+    Timer {
+        interval: 1500; running: Qt.application.name === "plasmawindowed"
+        onTriggered: {
+            const args = Qt.application.arguments, a = args.find(x => x.startsWith("frost-test:"))
+            if (!a) return
+            root.listFor = a.slice(11) === "main" ? "" : a.slice(11)
+            const shot = args.find(x => x.startsWith("frost-shot:"))
+            if (shot) shotTimer.start()
+        }
+    }
+    Timer {
+        id: shotTimer; interval: 3500
+        onTriggered: root.fullRepresentationItem.grabToImage(r => { r.saveToFile(Qt.application.arguments.find(x => x.startsWith("frost-shot:")).slice(11)); Qt.quit() })
+    }
 
     fullRepresentation: GlassCard {
         id: card
@@ -151,7 +170,9 @@ PlasmoidItem {
             property string shortLabel: label
             property string sub
             property bool on: false
+            property bool hasList: false
             signal hit()
+            signal more()
             radius: height / 2
             color: on ? st.accent : (pm.containsMouse ? st.hover : st.faint)
             border.color: on ? "transparent" : st.border
@@ -166,11 +187,13 @@ PlasmoidItem {
                     radius: width / 2
                     color: pl.on ? Qt.rgba(1, 1, 1, 0.22) : st.faint
                     Kirigami.Icon { anchors.centerIn: parent; width: 16; height: 16; isMask: true; color: pl.on ? st.textOnAccent : st.text; source: pl.icon }
+                    MouseArea { anchors.fill: parent; z: 2; visible: pl.hasList; cursorShape: Qt.PointingHandCursor; onClicked: pl.hit() }
                 }
                 Text { text: card.compact ? pl.shortLabel : pl.label; color: pl.on ? st.textOnAccent : st.text; font.pixelSize: 13; elide: Text.ElideRight; Layout.fillWidth: true }
                 Text { visible: !card.compact; text: pl.sub; color: pl.on ? Qt.rgba(1, 1, 1, 0.85) : st.muted; font.pixelSize: 11 }
             }
-            MouseArea { id: pm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: pl.hit() }
+            MouseArea { id: pm; anchors.fill: parent; z: -1; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: pl.hasList ? pl.more() : pl.hit() }
         }
 
         GridLayout {
@@ -199,12 +222,14 @@ PlasmoidItem {
                     icon: nm.wirelessEnabled ? "network-wireless" : "network-wireless-disconnected"
                     label: "Wi-Fi"; sub: nm.wirelessEnabled ? "On" : "Off"; on: nm.wirelessEnabled
                     onHit: nmHandler.enableWireless(!nm.wirelessEnabled)
+                    hasList: true; onMore: root.listFor = "wifi"
                 }
                 Pill {
                     Layout.fillWidth: true; Layout.fillHeight: true
                     icon: root.btOn ? "network-bluetooth" : "network-bluetooth-inactive"
                     label: "Bluetooth"; shortLabel: "BT"; sub: root.btOn ? "On" : "Off"; on: root.btOn
                     onHit: BluezQt.Manager.bluetoothBlocked = !BluezQt.Manager.bluetoothBlocked
+                    hasList: true; onMore: root.listFor = "bluetooth"
                 }
                 Pill {
                     Layout.fillWidth: true; Layout.fillHeight: true
@@ -232,6 +257,40 @@ PlasmoidItem {
                     Layout.fillWidth: true; Layout.fillHeight: true
                     icon: "system-shutdown"; label: "Power"; sub: "Options"
                     onHit: exec.run("qdbus6 org.kde.LogoutPrompt /LogoutPrompt promptAll")
+                }
+            }
+        }
+        // the Wi-Fi / Bluetooth list, over the whole card
+        Rectangle {
+            anchors.fill: parent
+            visible: root.listFor !== ""
+            radius: card.radius
+            color: "#0e0e12"
+            border.color: st.border
+            MouseArea { anchors.fill: parent }          // keep clicks off the card below
+            ColumnLayout {
+                anchors { fill: parent; margins: 12 }
+                spacing: 8
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Rectangle {
+                        Layout.preferredWidth: 30; Layout.preferredHeight: 30; radius: 15
+                        color: backM.containsMouse ? st.hover : st.faint
+                        Kirigami.Icon { anchors.centerIn: parent; width: 16; height: 16; isMask: true; color: st.text; source: "go-previous" }
+                        MouseArea { id: backM; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.listFor = "" }
+                    }
+                    Text { text: root.listFor === "wifi" ? "Wi-Fi" : "Bluetooth"; color: st.text; font.pixelSize: 15; font.weight: Font.DemiBold
+                           Layout.fillWidth: true }
+                }
+                WifiList { visible: root.listFor === "wifi"; Layout.fillWidth: true; maxRows: 6 }
+                BluetoothList { visible: root.listFor === "bluetooth"; Layout.fillWidth: true; maxRows: 6 }
+                Item { Layout.fillHeight: true }
+                Text {
+                    text: root.listFor === "wifi" ? "Network Settings…" : "Bluetooth Settings…"
+                    color: setM.containsMouse ? st.accent : st.muted; font.pixelSize: 12
+                    MouseArea { id: setM; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                onClicked: exec.run(root.listFor === "wifi" ? "systemsettings kcm_networkmanagement" : "systemsettings kcm_bluetooth") }
                 }
             }
         }

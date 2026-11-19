@@ -48,6 +48,13 @@ PlasmoidItem {
         current ? nextBanner() : (isOpen = !isOpen)
     }
     Connections { target: Plasmoid; function onActivated() { root.toggleOpen() } }
+    // the Control Centre (org.frost.controlcentre) sits beside the island in the
+    // same panel: right-click or scroll down on the pill opens it
+    function openControlCentre() {
+        const all = Plasmoid.containment ? Plasmoid.containment.applets : []
+        for (const a of all) if (a.pluginName === "org.frost.controlcentre") { a.activated(); return true }
+        return false
+    }
     onExpandedChanged: (on) => { if (on) { root.toggleOpen(); Qt.callLater(() => root.expanded = false) } }
 
     readonly property color accent: "#F21D43"
@@ -531,7 +538,9 @@ PlasmoidItem {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root.isOpen = true
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onClicked: (m) => { if (m.button === Qt.RightButton && root.openControlCentre()) return; root.isOpen = true }
+                onWheel: (w) => { if (w.angleDelta.y < 0) root.openControlCentre() }
             }
         }
         Rectangle {   // second activity bubble (a transfer or the focus timer while something else leads)

@@ -67,6 +67,7 @@ PlasmoidItem {
                 if (src === root.devPy + " projects") root.projects = JSON.parse(data["stdout"])
                 else if (src === root.devPy + " repos") root.repos = JSON.parse(data["stdout"])
                 else if (src.startsWith(root.devPy + " files ") && src === root.devPy + " files " + root.q(root.filesFor)) root.files = JSON.parse(data["stdout"])
+                else if (src === root.devPy + " info " + root.q(root.infoFor)) root.info = JSON.parse(data["stdout"])
             } catch (e) {}
             disconnectSource(src)
         }
@@ -156,6 +157,22 @@ PlasmoidItem {
             else list.currentIndex = list.count - 1
         }
     }
+    // ---- preview pane: details of the selected result -------------------------
+    // {icon, title, sub, group, target}: target is a path / URL dev.py can describe
+    readonly property var selected: devActive && devList.count ? devList.currentItem && devList.currentItem.info
+                                   : list.currentItem ? list.currentItem.info : null
+    property var info: ({})
+    property string infoFor: ""
+    onSelectedChanged: { info = ({}); infoTimer.restart() }
+    Timer {   // ask dev.py once the selection settles
+        id: infoTimer; interval: 90
+        onTriggered: {
+            const t = root.selected ? root.selected.target : ""
+            root.infoFor = t
+            if (t) exec.connectSource(root.devPy + " info " + root.q(t))
+        }
+    }
+
     function runSelected(e) {
         if (devActive && devList.count) runDev(devItems[devList.currentIndex], e ? e.modifiers : 0)
         else list.runCurrent(e)
@@ -205,7 +222,10 @@ PlasmoidItem {
     Style { id: st }
     readonly property rect scr: Plasmoid.containment && Plasmoid.containment.screenGeometry.width > 0
                                 ? Plasmoid.containment.screenGeometry : Qt.rect(0, 0, Screen.width || 1920, Screen.height || 1080)
-    readonly property int cardW: 640
+    readonly property bool anyResults: devList.count + list.count > 0
+    readonly property int listW: 590
+    readonly property int previewW: 300
+    readonly property int cardW: anyResults ? listW + previewW + 1 : 640
     readonly property int catW: 152        // the category column, names right-aligned
     readonly property int rowH: 34
     readonly property int maxListH: 11 * rowH
@@ -288,7 +308,7 @@ PlasmoidItem {
                     font.pixelSize: 14; font.family: r.mono ? st.mono : Qt.application.font.family
                     elide: Text.ElideRight; textFormat: Text.PlainText
                     // the name comes first; the subtext gets what is left
-                    Layout.preferredWidth: Math.min(implicitWidth, r.sub ? Math.max(140, (r.width - root.catW - 60 - hintText.width) * 0.62) : implicitWidth)
+                    Layout.preferredWidth: Math.min(implicitWidth, r.sub ? Math.max(140, (r.width - root.catW - 60) * 0.62) : implicitWidth)
                     Layout.maximumWidth: Layout.preferredWidth
                     Layout.minimumWidth: Math.min(implicitWidth, 60)
                 }
@@ -302,7 +322,7 @@ PlasmoidItem {
                 Item { Layout.fillWidth: true; visible: r.sub.length === 0 }
                 Text {
                     id: hintText
-                    visible: r.current && r.hint.length > 0
+                    visible: false   // shown in the preview pane instead
                     text: r.hint; color: Qt.rgba(1, 1, 1, 0.85); font.pixelSize: 11
                 }
             }
@@ -312,6 +332,108 @@ PlasmoidItem {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: (m) => r.activated(m.modifiers)
+            }
+        }
+    }
+
+    // the preview pane on the right: a big icon (or the picture itself), the
+    // name, a line about it, details from dev.py and, for text files, the start of the file
+    component Preview: Item {
+        id: pv
+        readonly property var sel: root.selected
+        readonly property var inf: root.info || ({})
+        readonly property var rows: inf.rows || []
+        clip: true
+        visible: sel !== null
+        ColumnLayout {
+            anchors { fill: parent; leftMargin: 16; rightMargin: 14; topMargin: 8; bottomMargin: 6 }
+            spacing: 6
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: pv.inf.kind === "image" ? 140 : 60
+                Layout.topMargin: 4
+                Image {
+                    id: thumb
+                    visible: pv.inf.kind === "image" && status === Image.Ready
+                    anchors.fill: parent
+                    source: pv.inf.kind === "image" ? "file://" + encodeURI(pv.inf.path) : ""
+                    fillMode: Image.PreserveAspectFit
+                    asynchronous: true
+                    sourceSize { width: 560; height: 280 }
+                }
+                Kirigami.Icon {
+                    visible: !thumb.visible
+                    anchors.centerIn: parent
+                    width: 60; height: 60
+                    source: pv.sel ? pv.sel.icon : ""
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                text: pv.sel ? pv.sel.title : ""
+                // a bare answer (calculator, units) gets shown large
+                readonly property bool answer: pv.rows.length === 0 && pv.sel && !pv.sel.sub && String(pv.sel.title).length < 18
+                color: st.text; font.pixelSize: answer ? 30 : 15; font.weight: Font.DemiBold
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight
+                textFormat: Text.PlainText
+            }
+            Text {
+                Layout.fillWidth: true
+                readonly property string about: pv.inf.about || (pv.sel ? pv.sel.sub : "")
+                visible: about.length > 0
+                text: about
+                color: st.muted; font.pixelSize: 12
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap; maximumLineCount: 3; elide: Text.ElideRight
+                textFormat: Text.PlainText
+            }
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                text: pv.sel ? String(pv.sel.group).toUpperCase() : ""
+                color: st.accent; font.pixelSize: 10; font.letterSpacing: 1.4
+            }
+            Rectangle { visible: pv.rows.length > 0; Layout.fillWidth: true; Layout.preferredHeight: 1; Layout.topMargin: 2; color: st.faint }
+            Repeater {
+                model: pv.rows
+                RowLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Text { text: modelData[0]; color: st.muted; font.pixelSize: 11; horizontalAlignment: Text.AlignRight
+                           Layout.preferredWidth: 78 }
+                    Text { text: modelData[1]; color: st.text; font.pixelSize: 11; elide: Text.ElideMiddle; Layout.fillWidth: true
+                           textFormat: Text.PlainText }
+                }
+            }
+            Rectangle {   // the start of a text file
+                visible: !!pv.inf.text
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: 40
+                Layout.topMargin: 4
+                radius: 8
+                color: Qt.rgba(0, 0, 0, 0.28)
+                border.color: st.faint
+                clip: true
+                Text {
+                    anchors { fill: parent; margins: 8 }
+                    text: pv.inf.text || ""
+                    color: Qt.rgba(1, 1, 1, 0.72)
+                    font.family: st.mono; font.pixelSize: 10
+                    textFormat: Text.PlainText
+                    elide: Text.ElideRight
+                }
+            }
+            Item { Layout.fillHeight: true; visible: !pv.inf.text }
+            Text {   // what Enter / Shift+Enter do
+                Layout.fillWidth: true
+                readonly property var acts: pv.sel && pv.sel.actions ? pv.sel.actions : []
+                text: pv.sel && pv.sel.hint && pv.sel.hint !== "↵" ? pv.sel.hint
+                      : "↵ Open" + (acts.length ? "  ·  Shift ↵ " + acts[0] : "")
+                color: st.muted; font.pixelSize: 10
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
             }
         }
     }
@@ -399,6 +521,14 @@ PlasmoidItem {
 
                 Item { Layout.preferredHeight: 6; visible: panel.hasResults || tips.visible || noResults.visible }
 
+                RowLayout {
+                visible: panel.hasResults
+                Layout.fillWidth: true
+                spacing: 0
+                ColumnLayout {
+                Layout.preferredWidth: root.listW
+                Layout.alignment: Qt.AlignTop
+                spacing: 0
                 // ---- developer results (projects, files, commands, GitHub)
                 ListView {
                     id: devList
@@ -424,6 +554,9 @@ PlasmoidItem {
                         hint: modelData.kind === "project" ? "↵ Code · Ctrl ↵ kitty · Shift ↵ Dolphin"
                             : modelData.kind === "file" ? "↵ Open · Shift ↵ Show" : "↵"
                         onActivated: (mods) => root.runDev(modelData, mods)
+                        readonly property var info: ({ icon: modelData.icon, title: modelData.title, sub: modelData.sub, group: modelData.group,
+                                                       target: modelData.kind === "project" || modelData.kind === "file" ? modelData.arg : "",
+                                                       hint: hint })
                     }
                 }
 
@@ -431,7 +564,7 @@ PlasmoidItem {
                 ListView {
                     id: list
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(contentHeight, Math.max(0, root.maxListH - devList.height))
+                    Layout.preferredHeight: Math.min(contentHeight, Math.max(0, root.maxListH - (devList.visible ? devList.height : 0)))
                     visible: count > 0
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
@@ -467,6 +600,9 @@ PlasmoidItem {
                         current: !root.devActive && ListView.isCurrentItem
                         hint: "↵"
                         onActivated: { root.devActive = false; list.currentIndex = row.index; list.runCurrent(null) }
+                        readonly property var info: ({ icon: model.decoration, title: model.display || "", sub: model.subtext || "", group: ListView.section,
+                                                       target: model.urls && model.urls.length ? model.urls[0].toString() : "",
+                                                       actions: (model.actions || []).map(a => a.text || "").filter(t => t) })
                     }
 
                     function runCurrent(e) {
@@ -486,6 +622,15 @@ PlasmoidItem {
                         currentIndex = 0
                     }
                 }
+
+                }   // the lists
+                Rectangle { Layout.fillHeight: true; Layout.preferredWidth: 1; Layout.topMargin: 4; Layout.bottomMargin: 4; color: st.faint }
+                Preview {
+                    Layout.preferredWidth: root.previewW
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 300
+                }
+                }   // lists + preview
 
                 // ---- nothing found
                 Item {
