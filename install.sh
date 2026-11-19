@@ -77,8 +77,10 @@ kw ksplashrc KSplash Theme "org.frost.${MODE}"
 kw kdeglobals KDE LookAndFeelPackage "org.frost.${MODE}"   # shown as the active Global Theme
 
 # GTK apps (Firefox, etc.) follow the Plasma colours through Breeze-GTK
+# (unless extras/gtk/install.sh has switched them to the Frost GTK theme: keep that)
 if command -v gsettings >/dev/null; then
-  gsettings set org.gnome.desktop.interface gtk-theme Breeze || true
+  [ "$(gsettings get org.gnome.desktop.interface gtk-theme 2>/dev/null)" = "'Frost'" ] \
+    || gsettings set org.gnome.desktop.interface gtk-theme Breeze || true
   gsettings set org.gnome.desktop.interface color-scheme "prefer-$MODE" || true
 fi
 
@@ -99,12 +101,18 @@ for e in wobblywindows kwin6_effect_glitch magiclamp mouseclick mousemark trackm
   qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect "$e" >/dev/null 2>&1 || true
 done
 qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect blur >/dev/null 2>&1 || true
+# The Dynamic Island's panel stays opaque (desktop.sh): a translucent one gets its
+# whole box blurred, which shows as a grey box around the pill.
+island_panels=$(qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript \
+  'print(panels().filter(p => p.widgets().some(w => w.type == "org.frost.island")).map(p => p.id).join(" "))' 2>/dev/null || true)
 kquitapp6 plasmashell >/dev/null 2>&1 || true
-sleep 1
-for g in $(grep -oE '^\[PlasmaViews\]\[Panel [0-9]+\]$' $CFG/plasmashellrc | grep -oE '[0-9]+'); do
+for _ in $(seq 40); do pgrep -x plasmashell >/dev/null || break; sleep 0.25; done
+for g in $(grep -oE '^\[PlasmaViews\]\[Panel [0-9]+\]$' $CFG/plasmashellrc 2>/dev/null | grep -oE '[0-9]+'); do
+  case " $island_panels " in *" $g "*) continue ;; esac
   kwriteconfig6 --file plasmashellrc --group PlasmaViews --group "Panel $g" --key panelOpacity 2
 done
 rm -f ~/.cache/ksvg-elements ~/.cache/plasma_theme_Frost*.kcache 2>/dev/null || true
-(setsid kstart plasmashell >/dev/null 2>&1 &)
+# through its service, so it gets the Frost OSD bridge (widgets/install-widgets.sh)
+systemctl --user start plasma-plasmashell.service 2>/dev/null || (setsid kstart plasmashell >/dev/null 2>&1 &)
 /usr/lib/x86_64-linux-gnu/libexec/plasma-changeicons "$ICONS" >/dev/null 2>&1 || true
 echo "Frost $V applied. Apps that were already open pick up the new style after a restart."

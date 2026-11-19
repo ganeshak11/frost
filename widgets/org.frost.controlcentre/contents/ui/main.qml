@@ -260,7 +260,8 @@ PlasmoidItem {
                 onPressed: (e) => { lv.dragging = true; lv.setLevel(hs.kind, at(e.x)) }
                 onPositionChanged: (e) => { if (Date.now() - lastSent > 80) { lastSent = Date.now(); lv.setLevel(hs.kind, at(e.x)) } }
                 onReleased: (e) => { lv.setLevel(hs.kind, at(e.x)); lv.dragging = false }
-                onWheel: (w) => lv.setLevel(hs.kind, hs.value + (w.angleDelta.y > 0 ? 0.05 : -0.05))
+                // mouse wheels move 5% a notch; touchpads move with the fingers
+                onWheel: (w) => lv.setLevel(hs.kind, hs.value + (w.pixelDelta.y !== 0 ? w.pixelDelta.y / 300 : w.angleDelta.y / 120 * 0.05))
             }
             Kirigami.Icon {
                 anchors { left: parent.left; leftMargin: 7; verticalCenter: parent.verticalCenter }

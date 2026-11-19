@@ -39,7 +39,9 @@ PlasmoidItem {
         return (i === 0 || v >= 10 ? v.toFixed(0) : v.toFixed(1)) + u[i]
     }
     function deg(v) { return (Number(v) || 0) > 0 ? Math.round(v) + "°C" : "" }
-    function openMonitor(page) { exec.connectSource("plasma-systemmonitor --page-name " + page) }
+    // detached: otherwise the call waits for System Monitor to close, and the same
+    // click again would do nothing while it's open
+    function openMonitor(page) { exec.connectSource("setsid plasma-systemmonitor --page-name '" + page + "' >/dev/null 2>&1 &") }
 
     // 60 seconds of network history
     signal tick()

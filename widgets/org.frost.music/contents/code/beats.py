@@ -9,7 +9,7 @@ it twice is harmless: the second copy can't bind the port and quits.
 
 A short log of starts, stops and requests goes to ~/.cache/frost-beats.log.
 """
-import http.server, os, socketserver, subprocess, tempfile, threading, time
+import ctypes, http.server, os, signal, socketserver, subprocess, tempfile, threading, time
 
 PORT, BARS, IDLE = 47821, 28, 60
 LOG = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "frost-beats.log")
@@ -71,7 +71,13 @@ noise_reduction = 70
 conf.close()
 
 try:
-    cava = subprocess.Popen(["cava", "-p", conf.name], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    def die_with_parent():   # cava gets SIGTERM if this helper is killed, so it never runs on alone
+        try:
+            ctypes.CDLL("libc.so.6").prctl(1, signal.SIGTERM)   # PR_SET_PDEATHSIG
+        except Exception:
+            pass
+    cava = subprocess.Popen(["cava", "-p", conf.name], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                            preexec_fn=die_with_parent)
 except OSError as e:
     log(f"cava could not start: {e}")
     os.unlink(conf.name)

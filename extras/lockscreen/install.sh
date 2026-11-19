@@ -17,7 +17,8 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 PKG=org.frost.lockscreen
 DEST=${XDG_DATA_HOME:-$HOME/.local/share}/plasma/shells/$PKG
 DROPIN=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/plasma-kwin_wayland.service.d
-GREET=$(ls /usr/lib/*/libexec/kscreenlocker_greet /usr/libexec/kscreenlocker_greet 2>/dev/null | head -1)
+# (with pipefail, ls failing on the path that isn't there must not end the script)
+GREET=$(ls /usr/lib/*/libexec/kscreenlocker_greet /usr/libexec/kscreenlocker_greet 2>/dev/null | head -1 || true)
 
 case "${1:-}" in
   --undo)

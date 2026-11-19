@@ -728,6 +728,11 @@ class Notes(QWidget):
             QTimer.singleShot(2500, self.reset_delete)
             return
         gone = self.cur
+        # save what was typed in the last moment first, so the trash keeps the whole note
+        self.timer.stop()
+        if self.dirty and self.edit.toPlainText().strip():
+            self.store.write(gone, self.edit.toPlainText())
+        self.dirty = False
         self.cur = None
         self.store.trash(gone)
         self.reset_delete()

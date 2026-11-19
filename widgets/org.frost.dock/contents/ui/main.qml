@@ -58,7 +58,10 @@ PlasmoidItem {
     function idx(i) { return tasks.makeModelIndex(i) }
 
     // ---- context menu (a real Plasma menu, so it isn't clipped by the panel) --
-    property int menuIndex: -1
+    // the task the menu is for, as a persistent index: it follows the task when
+    // apps open or close while the menu is up (a row number would then point at
+    // another app)
+    property var menuTask: null
     property var menuModel: ({})
     PlasmaExtras.Menu {
         id: menu
@@ -67,7 +70,7 @@ PlasmoidItem {
         PlasmaExtras.MenuItem { separator: true }
         PlasmaExtras.MenuItem {
             text: "New Window"; icon: "window-new"
-            onClicked: tasks.requestNewInstance(root.idx(root.menuIndex))
+            onClicked: tasks.requestNewInstance(root.menuTask)
         }
         PlasmaExtras.MenuItem {
             readonly property bool pinned: tasks.launcherPosition(root.menuModel.LauncherUrlWithoutIcon || "") >= 0
@@ -79,18 +82,18 @@ PlasmoidItem {
         PlasmaExtras.MenuItem {
             visible: !root.menuModel.IsLauncher
             text: root.menuModel.IsMinimized ? "Restore" : "Minimise"; icon: "window-minimize"
-            onClicked: tasks.requestToggleMinimized(root.idx(root.menuIndex))
+            onClicked: tasks.requestToggleMinimized(root.menuTask)
         }
         PlasmaExtras.MenuItem {
             visible: !root.menuModel.IsLauncher
             text: "Maximise"; icon: "window-maximize"
-            onClicked: tasks.requestToggleMaximized(root.idx(root.menuIndex))
+            onClicked: tasks.requestToggleMaximized(root.menuTask)
         }
         PlasmaExtras.MenuItem { visible: !root.menuModel.IsLauncher; separator: true }
         PlasmaExtras.MenuItem {
             visible: !root.menuModel.IsLauncher
             text: (root.menuModel.ChildCount || 0) > 1 ? "Close All Windows" : "Close"; icon: "window-close"
-            onClicked: tasks.requestClose(root.idx(root.menuIndex))
+            onClicked: tasks.requestClose(root.menuTask)
         }
     }
 
@@ -237,7 +240,7 @@ PlasmoidItem {
                         else tasks.requestActivate(root.idx(index))
                     }
                     onMiddleClick: tasks.requestNewInstance(root.idx(index))
-                    onRightClick: { root.menuIndex = index; root.menuModel = model; menu.visualParent = task; menu.openRelative() }
+                    onRightClick: { root.menuTask = tasks.makePersistentModelIndex(index); root.menuModel = model; menu.visualParent = task; menu.openRelative() }
                     onWheel: (d) => tasks.requestActivate(root.idx(index))
 
                     // press and hold, then drag sideways to reorder

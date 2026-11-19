@@ -81,13 +81,17 @@ PlasmoidItem {
 
     property var bars: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     property double lastStart: 0
+    property bool barsBusy: false          // one request at a time
     readonly property string beatsHelper: "setsid python3 '" + Qt.resolvedUrl("../code/beats.py").toString().replace("file://", "") + "' >/dev/null 2>&1 &"
     Timer {
         interval: 60; repeat: true; running: root.playing && root.musicActive
         onTriggered: {
+            if (root.barsBusy) return
+            root.barsBusy = true
             const xhr = new XMLHttpRequest()
             xhr.onreadystatechange = () => {
                 if (xhr.readyState !== XMLHttpRequest.DONE) return
+                root.barsBusy = false
                 if (xhr.status === 200) { try { const v = JSON.parse(xhr.responseText); if (v.length) root.bars = v.filter((_, i) => i % 2 === 0).slice(0, 16) } catch (e) {} }
                 else if (Date.now() - root.lastStart > 5000) { root.lastStart = Date.now(); exec.connectSource(root.beatsHelper) }
             }
@@ -427,7 +431,8 @@ PlasmoidItem {
             Rectangle {
                 anchors.bottom: parent.bottom
                 width: 3; radius: 1.5
-                height: Math.max(3, parent.h * Math.min(100, root.bars[index * 2] || 0) / 100)
+                // spread the bars over all the values there are (14), whatever the count
+                height: Math.max(3, parent.h * Math.min(100, root.bars[Math.floor(index * root.bars.length / parent.count)] || 0) / 100)
                 color: index % 2 ? root.accent : Qt.rgba(1, 1, 1, 0.9)
                 Behavior on height { NumberAnimation { duration: 70 } }
             }
@@ -607,7 +612,14 @@ PlasmoidItem {
                 cursorShape: Qt.PointingHandCursor
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 onClicked: (m) => { if (m.button === Qt.RightButton && root.openControlCentre()) return; root.isOpen = true }
-                onWheel: (w) => { if (w.angleDelta.y < 0) root.openControlCentre() }
+                // a touchpad sends a stream of wheel events: open once, don't toggle on every one
+                property double lastWheel: 0
+                onWheel: (w) => {
+                    if (w.angleDelta.y >= 0) return
+                    const t = Date.now(), quiet = t - lastWheel > 700
+                    lastWheel = t
+                    if (quiet) root.openControlCentre()
+                }
             }
         }
         Rectangle {   // second activity bubble (a transfer or the focus timer while something else leads)

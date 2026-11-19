@@ -15,13 +15,23 @@ playing sound. Changes are made by the widgets themselves (wpctl / pactl).
 Exits on its own after a minute without a request. Starting it twice is
 harmless: the second copy can't bind the port and quits.
 """
-import http.server, json, os, socketserver, subprocess, threading, time
+import ctypes, http.server, json, os, signal, socketserver, subprocess, threading, time
 from urllib.parse import urlparse, parse_qs
 
 PORT, IDLE, WAIT = 47822, 60, 20
 BD = ["qdbus6", "org.kde.ScreenBrightness", "/org/kde/ScreenBrightness/display0", "org.kde.ScreenBrightness.Display."]
 
 state = {"ver": 0}
+children = []           # the watcher processes (pactl subscribe, dbus-monitor)
+
+
+def die_with_parent():
+    """In a watcher process: get SIGTERM when this helper ends, however it ends,
+    so watchers never outlive it (they used to pile up, one set per start)."""
+    try:
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGTERM)   # PR_SET_PDEATHSIG
+    except Exception:
+        pass
 cond = threading.Condition()
 last_hit = time.time()
 dirty = threading.Event()
@@ -104,10 +114,14 @@ def refresher():
 def watch(cmd, match):
     while True:
         try:
-            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                                 preexec_fn=die_with_parent)
+            children.append(p)
             for line in p.stdout:
                 if match(line):
                     dirty.set()
+            p.wait()
+            children.remove(p)
         except OSError:
             pass
         time.sleep(3)          # pipewire or the bus restarted: start watching again
@@ -119,7 +133,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         global last_hit
         last_hit = time.time()
         q = parse_qs(urlparse(self.path).query)
-        since = int((q.get("since") or ["-1"])[0] or -1)
+        try:
+            since = int((q.get("since") or ["-1"])[0] or -1)
+        except ValueError:
+            since = -1
         with cond:
             cond.wait_for(lambda: state["ver"] > since and state["ver"] > 0, timeout=WAIT)
             body = json.dumps(state).encode()
@@ -165,6 +182,11 @@ dirty.set()
 def idle():
     while time.time() - last_hit < IDLE:
         time.sleep(5)
+    for p in list(children):
+        try:
+            p.terminate()
+        except OSError:
+            pass
     srv.shutdown()
 
 

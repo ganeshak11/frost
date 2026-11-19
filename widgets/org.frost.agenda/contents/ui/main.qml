@@ -108,14 +108,17 @@ PlasmoidItem {
         }
         m = s.match(/^(\d{1,2}[:.]\d{2}\s*(?:am|pm)?)?\s*(.+)$/i)
         if (!m || !m[2]) return
-        let time = ""
+        let time = "", title = m[2]
         if (m[1]) {
             let [h, mi] = m[1].replace(".", ":").replace(/\s*(am|pm)/i, "").split(":").map(Number)
+            const ampm = /am|pm/i.test(m[1])
             if (/pm/i.test(m[1]) && h < 12) h += 12
             if (/am/i.test(m[1]) && h === 12) h = 0
-            time = String(h).padStart(2, "0") + ":" + String(mi).padStart(2, "0")
+            if (h < 24 && mi < 60 && !(ampm && (h > 23 || +m[1].split(/[:.]/)[0] > 12)))
+                time = String(h).padStart(2, "0") + ":" + String(mi).padStart(2, "0")
+            else title = s                                 // not a real time: it's part of the title
         }
-        const ev = { id: Date.now().toString(36), date: date, time: time, title: m[2], repeat: newRepeat, kind: newKind }
+        const ev = { id: Date.now().toString(36), date: date, time: time, title: title, repeat: newRepeat, kind: newKind }
         Plasmoid.configuration.events = JSON.stringify(localEvents.concat([ev]))
     }
     function removeEvent(ev) {
@@ -144,28 +147,88 @@ PlasmoidItem {
         }
         return out
     }
-    // a feed's events as saved: [{date:"2026-11-18", time:"09:30", title}], 2 months back to 12 ahead
+    // a feed's events as saved: [{date:"2026-11-18", time:"09:30", title}], 2 months back to 12 ahead.
+    // Repeating events (RRULE: DAILY / WEEKLY with BYDAY / MONTHLY / YEARLY, with
+    // INTERVAL, COUNT, UNTIL) are expanded; EXDATEs and moved occurrences
+    // (RECURRENCE-ID) are left out of the series.
+    function icsDate(v) {      // "20261119" / "20261119T093000[Z]" -> {d: Date, allDay}
+        const y = +v.slice(0, 4), mo = +v.slice(4, 6) - 1, d = +v.slice(6, 8)
+        if (v.length === 8) return { d: new Date(y, mo, d), allDay: true }
+        const H = +v.slice(9, 11), M = +v.slice(11, 13)
+        return { d: v.endsWith("Z") ? new Date(Date.UTC(y, mo, d, H, M)) : new Date(y, mo, d, H, M), allDay: false }
+    }
+    function stamp(d, allDay) { return key(d) + (allDay ? "" : Qt.formatTime(d, "HH:mm")) }
+    function expand(ev, lo, hi) {
+        if (!ev.rrule) return [ev.start]
+        const r = {}
+        for (const part of ev.rrule.split(";")) { const [k, v] = part.split("="); r[k] = v }
+        const step = Math.max(1, +(r.INTERVAL || 1)), count = r.COUNT ? +r.COUNT : Infinity
+        const until = r.UNTIL ? icsDate(r.UNTIL).d : null
+        const s = ev.start, out = []
+        const at = (y, m, d) => new Date(y, m, d, s.getHours(), s.getMinutes())
+        const days = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"]
+        const byday = (r.BYDAY || "").split(",").map(x => days.indexOf(x.slice(-2))).filter(x => x >= 0)
+        let n = 0
+        // walks the series in order; false once it's over
+        const take = (d) => {
+            if (d < s) return true
+            if ((until && d > until) || n >= count || d > hi) return false
+            n++
+            if (d >= lo && !ev.skip.includes(stamp(d, ev.allDay))) out.push(d)
+            return true
+        }
+        // with no COUNT to honour, start a step or two before the window (an old
+        // daily series would otherwise run out of steps before reaching today)
+        let i0 = 0
+        if (!r.COUNT && lo > s) {
+            const months = (lo.getFullYear() - s.getFullYear()) * 12 + lo.getMonth() - s.getMonth()
+            i0 = Math.max(0, Math.floor(r.FREQ === "DAILY" ? (lo - s) / 86400000 / step
+                                      : r.FREQ === "WEEKLY" ? (lo - s) / 604800000 / step
+                                      : r.FREQ === "MONTHLY" ? months / step : months / 12 / step) - 2)
+        }
+        for (let i = i0; i < i0 + 3000; i++) {
+            if (r.FREQ === "DAILY") { if (!take(at(s.getFullYear(), s.getMonth(), s.getDate() + i * step))) break }
+            else if (r.FREQ === "WEEKLY") {
+                const week = at(s.getFullYear(), s.getMonth(), s.getDate() - s.getDay() + i * 7 * step)   // that week's Sunday
+                const which = byday.length ? byday.slice().sort() : [s.getDay()]
+                let go = true
+                for (const wd of which) if (!(go = take(at(week.getFullYear(), week.getMonth(), week.getDate() + wd)))) break
+                if (!go) break
+            } else if (r.FREQ === "MONTHLY") {
+                const d = at(s.getFullYear(), s.getMonth() + i * step, s.getDate())
+                if (d.getDate() === s.getDate() && !take(d)) break                    // months without that day are skipped
+            } else if (r.FREQ === "YEARLY") {
+                const d = at(s.getFullYear() + i * step, s.getMonth(), s.getDate())
+                if (d.getMonth() === s.getMonth() && !take(d)) break                  // 29 Feb only in leap years
+            } else return [s]
+        }
+        return out
+    }
     function parseIcs(text) {
-        const lines = text.replace(/\r\n[ \t]/g, "").split(/\r?\n/)
-        const out = [], lo = new Date(), hi = new Date()
+        const lines = text.replace(/\r?\n[ \t]/g, "").split(/\r?\n/)
+        const lo = new Date(), hi = new Date()
         lo.setMonth(lo.getMonth() - 2); hi.setMonth(hi.getMonth() + 12)
+        const evs = [], moved = {}          // uid -> stamps of occurrences moved to their own event
         let ev = null
         for (const l of lines) {
-            if (l === "BEGIN:VEVENT") ev = {}
-            else if (l === "END:VEVENT" && ev) {
-                if (ev.start && ev.start >= lo && ev.start <= hi)
-                    out.push({ date: key(ev.start), time: ev.allDay ? "" : Qt.formatTime(ev.start, "HH:mm"), title: ev.title || "(no title)" })
-                ev = null
-            } else if (ev && l.startsWith("SUMMARY")) ev.title = l.slice(l.indexOf(":") + 1).replace(/\\([,;\\])/g, "$1")
-            else if (ev && l.startsWith("DTSTART")) {
-                const v = l.slice(l.indexOf(":") + 1)
-                const y = +v.slice(0, 4), mo = +v.slice(4, 6) - 1, d = +v.slice(6, 8)
-                if (v.length === 8) { ev.start = new Date(y, mo, d); ev.allDay = true }
-                else {
-                    const H = +v.slice(9, 11), M = +v.slice(11, 13)
-                    ev.start = v.endsWith("Z") ? new Date(Date.UTC(y, mo, d, H, M)) : new Date(y, mo, d, H, M)
-                }
-            }
+            const val = l.slice(l.indexOf(":") + 1)
+            if (l === "BEGIN:VEVENT") ev = { skip: [] }
+            else if (l === "END:VEVENT" && ev) { if (ev.start) evs.push(ev); ev = null }
+            else if (!ev) continue
+            else if (l.startsWith("SUMMARY")) ev.title = val.replace(/\\([,;\\])/g, "$1")
+            else if (l.startsWith("UID")) ev.uid = val
+            else if (l.startsWith("RRULE")) ev.rrule = val
+            else if (l.startsWith("DTSTART")) { const t = icsDate(val); ev.start = t.d; ev.allDay = t.allDay }
+            else if (l.startsWith("EXDATE")) for (const x of val.split(",")) { const t = icsDate(x); ev.skip.push(stamp(t.d, t.allDay)) }
+            else if (l.startsWith("RECURRENCE-ID")) ev.recId = icsDate(val)
+        }
+        for (const e of evs) if (e.recId && e.uid) (moved[e.uid] = moved[e.uid] || []).push(stamp(e.recId.d, e.recId.allDay))
+        const out = []
+        for (const e of evs) {
+            if (e.rrule && e.uid && moved[e.uid]) e.skip = e.skip.concat(moved[e.uid])
+            for (const d of expand(e, lo, hi))
+                if (d >= lo && d <= hi)
+                    out.push({ date: key(d), time: e.allDay ? "" : Qt.formatTime(d, "HH:mm"), title: e.title || "(no title)" })
         }
         return out
     }
@@ -221,7 +284,20 @@ PlasmoidItem {
     Timer { interval: 30 * 60000; running: true; repeat: true; triggeredOnStart: true; onTriggered: root.syncFeeds(false) }
     Timer { interval: 60000; running: root.feedsFailing.length > 0; repeat: true; onTriggered: root.syncFeeds(true) }
     Connections { target: Plasmoid.configuration; function onFeedsChanged() { root.feedsFailing = []; root.syncFeeds(false) } }
-    Timer { interval: 60000; running: true; repeat: true; onTriggered: { const n = new Date(); if (n.getDate() !== root.today.getDate()) root.today = n } }
+    // a new day (also after sleeping through one, or a month): move today, and the
+    // selection and month with it when they were on today
+    Timer {
+        interval: 60000; running: true; repeat: true
+        onTriggered: {
+            const n = new Date()
+            if (root.key(n) === root.key(root.today)) return
+            const wasToday = root.key(root.selected) === root.key(root.today)
+            const wasThisMonth = root.shown.getFullYear() === root.today.getFullYear() && root.shown.getMonth() === root.today.getMonth()
+            root.today = n
+            if (wasToday) root.selected = n
+            if (wasThisMonth) root.shown = new Date(n.getFullYear(), n.getMonth(), 1)
+        }
+    }
 
     // ---- reminders (as notifications, so the Dynamic Island shows them) --------
     P5Support.DataSource { id: exec; engine: "executable"; onNewData: (s) => disconnectSource(s) }

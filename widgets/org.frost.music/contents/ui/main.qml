@@ -56,15 +56,19 @@ PlasmoidItem {
     readonly property int barCount: 28
     property var bars: Array(barCount).fill(0)
     property double lastStart: 0
+    property bool busy: false            // one request at a time, however slow the helper is
     readonly property string helper: "setsid python3 '" + Qt.resolvedUrl("../code/beats.py").toString().replace("file://", "") + "' >/dev/null 2>&1 &"
     P5Support.DataSource { id: exec; engine: "executable"; onNewData: (s) => disconnectSource(s) }
     Timer {
         interval: 50; repeat: true
         running: root.playing && root.active
         onTriggered: {
+            if (root.busy) return
+            root.busy = true
             const xhr = new XMLHttpRequest()
             xhr.onreadystatechange = () => {
                 if (xhr.readyState !== XMLHttpRequest.DONE) return
+                root.busy = false
                 if (xhr.status === 200) { try { const v = JSON.parse(xhr.responseText); if (v.length) root.bars = v } catch (e) {} }
                 else if (Date.now() - root.lastStart > 5000) { root.lastStart = Date.now(); exec.connectSource(root.helper) }
             }

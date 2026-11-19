@@ -272,6 +272,7 @@ PlasmoidItem {
                     // mouse wheels move 5% a notch; touchpads move with the fingers
                     const d = w.pixelDelta.y !== 0 ? w.pixelDelta.y / 300 : w.angleDelta.y / 120 * 0.05
                     if (!fd.own) fd.local = fd.muted ? 0 : fd.value
+                    if (d > 0 && fd.muted && fd.kind !== "light") lv.toggleMute(fd.kind)   // like dragging, scrolling up unmutes
                     fd.set(fd.local + d)
                     w.accepted = true
                 }

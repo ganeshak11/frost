@@ -66,14 +66,22 @@ for pat, browser in (("*.part", "Firefox"), ("*.crdownload", "Browser")):
                 out["dl"].append({"name": name, "bytes": st.st_size, "from": browser, "path": f})
         except Exception: pass
 # finished files from the last 15 s (to tell a finished download from a cancelled one)
+def age(f):
+    """seconds since f changed; a file that vanished meanwhile counts as old"""
+    try:
+        return time.time() - os.path.getmtime(f)
+    except OSError:
+        return 1e9
+
+
 out["recent"] = [os.path.basename(f) for f in glob.glob(os.path.expanduser("~/Downloads/*"))
-                 if not f.endswith((".part", ".crdownload")) and time.time() - os.path.getmtime(f) < 15]
+                 if not f.endswith((".part", ".crdownload")) and age(f) < 15]
 
 # a screenshot that just landed in the screenshots folder
 shots = [f for f in glob.glob(os.path.expanduser("~/Pictures/Screenshots/*")) if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))]
 if shots:
-    f = max(shots, key=os.path.getmtime)
-    if time.time() - os.path.getmtime(f) < 6: out["shot"] = f
+    f = min(shots, key=age)
+    if age(f) < 6: out["shot"] = f
 
 for line in run("bluetoothctl", "devices", "Connected").splitlines():
     parts = line.split(" ", 2)
@@ -91,9 +99,12 @@ try:
             num = lambda k, d: int(g.get(k, d) or d)
             phase = g.get("phase", "idle")
             left = num("pausedLeft", 0)
-            # full length of the current phase, for the progress ring
-            total = num("focusMinutes", 25) * 60 if phase.endswith("focus") else num("breakMinutes", 5) * 60
-            if phase.endswith("break") and left > total: total = num("longBreakMinutes", 15) * 60
+            # full length of the current phase, for the progress ring; like the
+            # Focus widget, every 4th break (streak a multiple of 4) is the long one
+            streak = num("streak", 0)
+            long_break = streak > 0 and streak % 4 == 0
+            total = num("focusMinutes", 25) * 60 if phase.endswith("focus") \
+                else num("longBreakMinutes" if long_break else "breakMinutes", 15 if long_break else 5) * 60
             out["focus"] = {"phase": phase, "endsAt": num("endsAt", 0), "pausedLeft": left,
                             "total": total, "project": g.get("project", "")}
         elif cfg.get(sec, "plugin", fallback="") == "org.frost.weather":

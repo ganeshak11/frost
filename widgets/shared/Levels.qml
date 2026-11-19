@@ -60,11 +60,17 @@ Item {
         mic = Math.min(1, s.mic); micMuted = s.micMuted
         if (s.light >= 0) { light = s.light; lightMax = s.lightMax }
     }
+    // the request waiting for the next change; only its answer counts, so opening
+    // and closing quickly never leaves two polling loops running side by side
+    property var req: null
     function poll() {
         if (!active) return
         const xhr = new XMLHttpRequest()
+        req = xhr
         xhr.onreadystatechange = () => {
             if (xhr.readyState !== XMLHttpRequest.DONE) return
+            if (xhr !== lv.req) return                  // replaced (or aborted) meanwhile
+            lv.req = null
             let s = null
             if (xhr.status === 200) { try { s = JSON.parse(xhr.responseText) } catch (e) {} }
             if (s) { lv.ok = true; lv.ver = s.ver; lv.apply(s); Qt.callLater(lv.poll) }
@@ -77,7 +83,11 @@ Item {
         xhr.open("GET", "http://127.0.0.1:47822/state?since=" + ver)
         xhr.send()
     }
-    onActiveChanged: if (active) { ver = -1; poll() }
+    onActiveChanged: if (active) {
+        ver = -1
+        if (req) { const old = req; req = null; old.abort() }   // ask afresh for the current state
+        poll()
+    }
     Component.onCompleted: poll()
     Timer { id: retry; interval: 1500; onTriggered: lv.poll() }
     // after letting go, show what the system really has (in case it changed meanwhile)

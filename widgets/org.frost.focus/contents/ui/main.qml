@@ -57,7 +57,13 @@ PlasmoidItem {
     property bool weSilenced: false
     function silence(on) {
         if (on && cfg.dndDuringFocus) { notif.notificationsInhibitedUntil = new Date(Number(cfg.endsAt)); notif.save(); weSilenced = true }
-        else if (!on && weSilenced) { notif.notificationsInhibitedUntil = undefined; notif.save(); weSilenced = false }
+        else if (!on && (weSilenced || ours())) { notif.notificationsInhibitedUntil = undefined; notif.save(); weSilenced = false }
+    }
+    // after a Plasma restart weSilenced is forgotten: Do Not Disturb that ends
+    // exactly when this session does is still ours to clear
+    function ours() {
+        const u = notif.notificationsInhibitedUntil
+        return cfg.dndDuringFocus && u !== undefined && u !== null && !isNaN(u) && Math.abs(new Date(u).getTime() - Number(cfg.endsAt)) < 2000
     }
     P5Support.DataSource { id: exec; engine: "executable"; onNewData: (s) => disconnectSource(s) }
     function notify(title, body) {

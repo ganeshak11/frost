@@ -20,6 +20,11 @@ def is_project(p):
     return any(os.path.exists(os.path.join(p, m)) for m in MARKS)
 
 
+def tilde(p):
+    """/home/me/x -> ~/x (only at the start)"""
+    return "~" + p[len(HOME):] if p == HOME or p.startswith(HOME + "/") else p
+
+
 def recent(p):
     g = os.path.join(p, ".git")
     try:
@@ -34,7 +39,11 @@ def projects():
         p = os.path.join(DEV, a)
         if a.startswith(".") or not os.path.isdir(p):
             continue
-        subs = [os.path.join(p, b) for b in os.listdir(p)
+        try:                    # one folder you can't read mustn't hide all the others
+            names = os.listdir(p)
+        except OSError:
+            continue
+        subs = [os.path.join(p, b) for b in names
                 if not b.startswith(".") and os.path.isdir(os.path.join(p, b)) and is_project(os.path.join(p, b))]
         found += subs
         if is_project(p) or not subs:
@@ -54,7 +63,8 @@ def files(q):
     # stream every match (short queries match mostly hidden folders first) and
     # stop once there are plenty of good candidates
     try:
-        proc = subprocess.Popen(["plocate", "-i", "-b", q], stdout=subprocess.PIPE, text=True, errors="replace")
+        # "--": a search that starts with "-" is a name, not an option
+        proc = subprocess.Popen(["plocate", "-i", "-b", "--", q], stdout=subprocess.PIPE, text=True, errors="replace")
     except Exception:
         return []
     for f in proc.stdout:
@@ -72,6 +82,7 @@ def files(q):
                 + (0 if any(f.startswith(d) for d in fav) else 5) + min(rel.count("/"), 4)
         scored.append((score, f))
     proc.kill()
+    proc.wait()
     out = []
     for _, f in sorted(scored)[:40]:
         if os.path.exists(f):
@@ -130,7 +141,7 @@ def app(path):
     rows = [["Kind", e.get("GenericName") or "Application"]]
     if e.get("Exec"): rows.append(["Runs", " ".join(w for w in e["Exec"].split() if not w.startswith("%"))])
     if e.get("Categories"): rows.append(["Categories", ", ".join(c for c in e["Categories"].split(";") if c)[:80]])
-    rows.append(["Desktop file", path.replace(HOME, "~")])
+    rows.append(["Desktop file", tilde(path)])
     return {"kind": "app", "about": e.get("Comment", ""), "rows": rows}
 
 
@@ -152,7 +163,7 @@ def info(target):
     if not os.path.exists(target):
         return {}
     st = os.stat(target)
-    where = os.path.dirname(target).replace(HOME, "~", 1)
+    where = tilde(os.path.dirname(target))
     if os.path.isdir(target):
         try:
             n = len([x for x in os.listdir(target) if not x.startswith(".")])

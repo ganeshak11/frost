@@ -53,6 +53,13 @@ PlasmoidItem {
         xhr.open("GET", url); xhr.send()
     }
     Timer { id: timer; interval: 15 * 60000; running: true; repeat: true; triggeredOnStart: true; onTriggered: root.refresh() }
+    // a new place in the settings: fetch it now, not at the next 15-minute tick
+    Timer { id: placeChanged; interval: 800; onTriggered: root.refresh() }
+    Connections {
+        target: Plasmoid.configuration
+        function onLatitudeChanged() { placeChanged.restart() }
+        function onLongitudeChanged() { placeChanged.restart() }
+    }
 
     readonly property var cur: wx ? wx.current : null
     readonly property var now: cur ? wmo(cur.weather_code, !cur.is_day) : ["", "weather-none-available"]
