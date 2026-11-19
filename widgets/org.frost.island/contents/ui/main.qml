@@ -632,7 +632,12 @@ PlasmoidItem {
                 id: blob
                 anchors.horizontalCenter: parent.horizontalCenter
                 y: 0
-                width: root.compactSize.width; height: root.pillH
+                // plain values, not bindings: morph() sets the size. A binding to the
+                // compact size here stayed alive under the Behavior even after morph()
+                // assigned the target, so a change to the compact pill (charging, mic,
+                // camera...) while the island was open pulled the width back to the
+                // pill's: the island then only grew downwards
+                width: 118; height: 32
                 radius: Math.min(height / 2, 30)
                 color: "black"
                 border.color: Qt.rgba(1, 1, 1, 0.10)
@@ -1015,6 +1020,55 @@ PlasmoidItem {
         }
     }
     Timer { id: hideTimer; interval: 450; onTriggered: if (!root.wantPop) pop.visible = false }
+
+    // Guard: now and then the floating window kept an older width while it got
+    // taller, so the shape was cut at the sides and only grew downwards. While
+    // the island is out, check that the window and the shape are where they
+    // should be and put them right (logged as "Dynamic Island: size guard").
+    Timer {
+        id: sizeGuard
+        interval: 250; repeat: true
+        running: pop.visible && root.wantPop
+        onTriggered: {
+            if (Math.abs(pop.width - root.popW) > 1 || Math.abs(pop.height - root.popH) > 1) {
+                console.log("Dynamic Island: size guard: window", pop.width + "x" + pop.height,
+                            "wanted", root.popW + "x" + root.popH, "mode", root.mode)
+                pop.width = root.popW; pop.height = root.popH
+            }
+            // the shape: once its spring has stopped it must be at the target
+            if (!sw.animation.running && !sh.animation.running && !settle.running
+                && (Math.abs(blob.width - root.targetSize.width) > 1 || Math.abs(blob.height - root.targetSize.height) > 1)) {
+                console.log("Dynamic Island: size guard: shape", blob.width + "x" + blob.height,
+                            "wanted", root.targetSize.width + "x" + root.targetSize.height, "mode", root.mode)
+                blob.width = root.targetSize.width; blob.height = root.targetSize.height
+            }
+        }
+    }
+
+    // for testing on its own: `plasmawindowed org.frost.island frost-test:open` logs the sizes
+    Timer {
+        interval: 1500; running: Qt.application.name === "plasmawindowed"
+        onTriggered: {
+            if (!Qt.application.arguments.find(x => x === "frost-test:open")) return
+            root.isOpen = true
+            testLog.start()
+        }
+    }
+    Timer {   // logs the biggest the shape got while open, then quits
+        id: testLog; interval: 3500
+        property real maxW: 0
+        property real maxH: 0
+        onTriggered: {
+            console.log("frost-test: shape reached", Math.round(maxW) + "x" + Math.round(maxH),
+                        "expanded target", root.popW - 2 * root.padX + "x" + (root.popH - root.padY))
+            Qt.quit()
+        }
+    }
+    Connections {
+        target: testLog.running ? blob : null
+        function onWidthChanged() { testLog.maxW = Math.max(testLog.maxW, blob.width) }
+        function onHeightChanged() { testLog.maxH = Math.max(testLog.maxH, blob.height) }
+    }
     // the expanded island closes when the pointer is no longer over it
     Timer {
         id: collapseCheck; interval: 1500; repeat: true

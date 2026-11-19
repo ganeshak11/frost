@@ -35,7 +35,7 @@ Item {
         lastSet = Date.now(); settle.restart()
         if (kind === "vol") { vol = v; run("wpctl set-volume @DEFAULT_AUDIO_SINK@ " + v.toFixed(2)) }
         else if (kind === "mic") { mic = v; run("wpctl set-volume @DEFAULT_AUDIO_SOURCE@ " + v.toFixed(2)) }
-        else { light = v; run(bd + "SetBrightness " + Math.max(1, Math.round(v * lightMax)) + " 0") }
+        else { light = v; run(bd + "SetBrightness " + Math.max(1, Math.round(v * lightMax)) + " 1") }   // flags 1: no on-screen indicator
     }
     function toggleMute(kind) {
         lastSet = Date.now(); settle.restart()

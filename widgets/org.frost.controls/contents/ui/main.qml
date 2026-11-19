@@ -4,7 +4,7 @@
 //   │ Wi-Fi  BT │     │     │                 right-click Wi-Fi / Bluetooth for its list,
 //   │ Air    TS │ ☀   │ 🔊  │                 click the module around the bubbles for
 //   ├───────────┼─────┼─────┤                 all four with names and details
-//   │  Focus    │Night│ Mic │   faders        drag or scroll; click the speaker to mute
+//   │  Focus    │Night│ Mic │   faders        drag (from where they are) or scroll; click the speaker to mute
 //   ├─────┬─────┼─────┼─────┤   Sound         outputs, inputs and per-app volume
 //   │Sound│Shot │Sett.│Power│   Power         Plasma's shutdown screen (it always asks)
 //   └─────┴─────┴─────┴─────┘
@@ -191,7 +191,11 @@ PlasmoidItem {
             Tip { visible: tm.containsMouse && tl.tip.length > 0; text: tl.tip }
         }
 
-        // a short, wide vertical fader that fills from the bottom with a flat top
+        // a short, wide vertical fader that fills from the bottom with a flat top.
+        // Like a phone: grabbing it moves the level from where it is (no jump to the
+        // pointer), a click without dragging goes to that spot. The fill follows the
+        // pointer every frame; the system is told at most every 40 ms, and once more
+        // on release with the exact value.
         component Fader: Rectangle {
             id: fd
             property string kind
@@ -200,7 +204,16 @@ PlasmoidItem {
             property string icon
             property string mutedIcon: icon
             property string tip
-            readonly property real level: muted ? 0 : Math.max(0, Math.min(1, value))
+            property real local: 0                     // the level while it's ours (dragging, scrolling)
+            readonly property bool own: fm.pressed || push.running || release.running
+            readonly property real level: muted && !own ? 0 : Math.max(0, Math.min(1, own ? local : value))
+            function set(v) {
+                local = Math.max(0, Math.min(1, v))
+                release.restart()
+                if (!push.running) push.start()
+            }
+            Timer { id: push; interval: 40; onTriggered: lv.setLevel(fd.kind, fd.local) }
+            Timer { id: release; interval: 450 }       // keep our value until the system has caught up
             radius: card.mr
             color: fm.containsMouse || fm.pressed ? card.moduleHover : card.module
             Behavior on color { ColorAnimation { duration: 160 } }
@@ -210,7 +223,8 @@ PlasmoidItem {
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
                 height: fd.height * fd.level
                 clip: true
-                Behavior on height { enabled: !lv.dragging; NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                // follow the pointer exactly while dragging; glide for clicks, scrolling and outside changes
+                Behavior on height { enabled: !fm.dragging; NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                 Rectangle {
                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
                     height: fd.height; radius: fd.radius
@@ -219,7 +233,7 @@ PlasmoidItem {
             }
             Text {   // the number, while the pointer is on it
                 anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 9 }
-                text: fd.muted ? "off" : Math.round(fd.value * 100)
+                text: fd.muted && !fd.own ? "off" : Math.round(fd.level * 100)
                 opacity: fm.containsMouse || fm.pressed ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: 150 } }
                 color: fillBox.height > fd.height - 22 ? st.textOnFill : st.muted
@@ -231,25 +245,44 @@ PlasmoidItem {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 preventStealing: true
-                property real lastSent: 0
-                function at(y) { return 1 - y / height }
+                property real startV: 0
+                property real startY: 0
+                property bool dragging: false
                 onPressed: (e) => {
-                    if (fd.muted && fd.kind !== "light") lv.toggleMute(fd.kind)   // dragging unmutes
-                    lv.dragging = true; lv.setLevel(fd.kind, at(e.y))
+                    if (fd.muted && fd.kind !== "light") lv.toggleMute(fd.kind)   // touching it unmutes
+                    lv.dragging = true
+                    startV = fd.muted ? 0 : Math.max(0, Math.min(1, fd.value)); startY = e.y
+                    dragging = false
+                    fd.local = startV
                 }
                 onPositionChanged: (e) => {
-                    if (pressed && Date.now() - lastSent > 80) { lastSent = Date.now(); lv.setLevel(fd.kind, at(e.y)) }
+                    if (!pressed) return
+                    if (!dragging && Math.abs(e.y - startY) < 3) return
+                    dragging = true
+                    fd.set(startV + (startY - e.y) / height)
                 }
-                onReleased: (e) => { lv.setLevel(fd.kind, at(e.y)); lv.dragging = false }
-                onCanceled: lv.dragging = false       // else the levels would never refresh again
-                onWheel: (w) => { lv.setLevel(fd.kind, fd.value + (w.angleDelta.y > 0 ? 0.05 : -0.05)); w.accepted = true }
+                onReleased: (e) => {
+                    if (!dragging) fd.set(1 - e.y / height)               // a click: go there
+                    push.stop(); lv.setLevel(fd.kind, fd.local)            // the exact final value
+                    release.restart()
+                    dragging = false; lv.dragging = false
+                }
+                onCanceled: { dragging = false; lv.dragging = false }      // else the levels would never refresh again
+                onWheel: (w) => {
+                    // mouse wheels move 5% a notch; touchpads move with the fingers
+                    const d = w.pixelDelta.y !== 0 ? w.pixelDelta.y / 300 : w.angleDelta.y / 120 * 0.05
+                    if (!fd.own) fd.local = fd.muted ? 0 : fd.value
+                    fd.set(fd.local + d)
+                    w.accepted = true
+                }
             }
             Kirigami.Icon {   // click to mute (volume)
                 id: fIcon
                 anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: Math.round(card.u * 0.22) }
                 width: Math.round(card.u * 0.38); height: width; isMask: true
-                source: fd.muted ? fd.mutedIcon : fd.icon
+                source: fd.muted && !fd.own ? fd.mutedIcon : fd.icon
                 color: fillBox.height > fIcon.anchors.bottomMargin + height / 2 ? st.textOnFill : st.text
+                Behavior on color { ColorAnimation { duration: 120 } }
                 MouseArea {
                     anchors.fill: parent; anchors.margins: -6
                     enabled: fd.kind !== "light"
