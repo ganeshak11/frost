@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Screen Time** card and its tracker (`extras/screentime`): time per app and per hour today, top
+  apps and the last seven days. Window titles are never recorded.
+
 ## v1.0.0 (2026-11-19)
 
 The first release of Frost: a dark-only, glassmorphic look for KDE Plasma 6 on Wayland, with the

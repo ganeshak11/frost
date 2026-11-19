@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+"""Frost Screen Time: counts how long each app is the active window.
+
+    frost-screentime daemon    run the tracker (started at login by the autostart entry)
+    frost-screentime summary   print today's and this week's totals as JSON (used by the card)
+    frost-screentime quit      stop a running tracker
+
+A small KWin script (kwin-script.js, loaded by the daemon) reports every window
+activation over D-Bus. The daemon adds up the seconds per app and per hour and
+keeps one file per day in ~/.local/share/frost/screentime/YYYY-MM-DD.json.
+Only the app is recorded, never window titles.
+
+Time stops counting while the screen is locked or the laptop is asleep. Plasma on
+Wayland does not report input idle time to other programs, so idle minutes before
+the screen locks itself still count.
+"""
+import json, os, sys, time, signal, datetime as dt
+from pathlib import Path
+
+BUS_NAME = "org.frost.ScreenTime"
+IFACE = "org.frost.ScreenTime"
+PLUGIN = "frost-screentime"
+DATA = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "frost/screentime"
+HERE = Path(os.path.realpath(__file__)).parent
+SCRIPT = HERE / "kwin-script.js"
+TICK = 5            # seconds between counts
+GAP = 30            # a longer gap between ticks means we were asleep: don't count it
+IGNORE = {"", "plasmashell", "org.kde.plasmashell", "kwin_wayland", "kwin", "ksmserver",
+          "org.kde.ksmserver", "kscreenlocker_greet", "org.kde.krunner", "krunner",
+          "org.kde.polkit-kde-authentication-agent-1", "xwaylandvideobridge"}
+
+
+def day_file(d):
+    return DATA / f"{d.isoformat()}.json"
+
+
+def load_day(d):
+    try:
+        data = json.loads(day_file(d).read_text())
+    except (OSError, ValueError):
+        data = {}
+    data.setdefault("apps", {})
+    hours = data.get("hours")
+    if not isinstance(hours, list) or len(hours) != 24:
+        data["hours"] = [0] * 24
+    return data
+
+
+def save_day(d, data):
+    DATA.mkdir(parents=True, exist_ok=True)
+    tmp = day_file(d).with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, separators=(",", ":")))
+    tmp.replace(day_file(d))
+
+
+# ---------- app names and icons from .desktop files ----------
+def _app_dirs():
+    home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+    dirs = [home] + [Path(p) for p in os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share").split(":") if p]
+    dirs += [home / "flatpak/exports/share", Path("/var/lib/flatpak/exports/share"), Path("/var/lib/snapd/desktop")]
+    return [d / "applications" for d in dirs]
+
+
+_cache = {}
+def describe(cls, desktop):
+    """(key, name, icon) for a window's resource class and desktop file name."""
+    k = (cls, desktop)
+    if k in _cache:
+        return _cache[k]
+    key = (desktop or cls).lower()
+    name, icon = None, desktop or cls.lower()
+    for cand in filter(None, [desktop, cls, cls.lower()]):
+        for d in _app_dirs():
+            f = d / f"{cand}.desktop"
+            if not f.is_file():
+                continue
+            entry = False
+            try:
+                for line in f.read_text(errors="ignore").splitlines():
+                    if line.startswith("["):
+                        if entry:
+                            break
+                        entry = line.strip() == "[Desktop Entry]"
+                    elif entry and line.startswith("Name=") and not name:
+                        name = line[5:].strip()
+                    elif entry and line.startswith("Icon="):
+                        icon = line[5:].strip()
+            except OSError:
+                continue
+            if name:
+                break
+        if name:
+            break
+    if not name:
+        base = (desktop or cls).split(".")[-1]
+        name = base.replace("-", " ").replace("_", " ").title() if base else "Unknown"
+    _cache[k] = (key, name, icon)
+    return _cache[k]
+
+
+# ---------- the tracker ----------
+def daemon():
+    import dbus, dbus.service
+    from dbus.mainloop.glib import DBusGMainLoop
+    from gi.repository import GLib
+
+    DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+    if bus.name_has_owner(BUS_NAME):
+        print("frost-screentime is already running"); return
+    loop = GLib.MainLoop()
+
+    state = {"app": None, "locked": False, "last": time.monotonic(),
+             "day": dt.date.today(), "dirty": False}
+    state["data"] = load_day(state["day"])
+
+    def flush():
+        if state["dirty"]:
+            save_day(state["day"], state["data"]); state["dirty"] = False
+        return True
+
+    class Service(dbus.service.Object):
+        @dbus.service.method(IFACE, in_signature="ss", out_signature="")
+        def Activate(self, cls, desktop):
+            cls, desktop = str(cls), str(desktop)
+            count()  # charge the time so far to the previous app
+            if cls.lower() in IGNORE or desktop.lower() in IGNORE:
+                state["app"] = None
+            else:
+                state["app"] = describe(cls, desktop)
+
+        @dbus.service.method(IFACE, in_signature="", out_signature="")
+        def Flush(self):
+            count(); flush()
+
+        @dbus.service.method(IFACE, in_signature="", out_signature="")
+        def Quit(self):
+            count(); flush(); unload_script(); loop.quit()
+
+    def count():
+        now = time.monotonic()
+        secs, state["last"] = now - state["last"], now
+        today = dt.date.today()
+        if today != state["day"]:                       # midnight: start a new file
+            flush(); state["day"], state["data"] = today, load_day(today)
+        if secs > GAP or state["locked"] or not state["app"]:
+            return True
+        key, name, icon = state["app"]
+        a = state["data"]["apps"].setdefault(key, {"secs": 0})
+        a["secs"] = round(a["secs"] + secs, 1); a["name"] = name; a["icon"] = icon
+        state["data"]["hours"][dt.datetime.now().hour] = round(state["data"]["hours"][dt.datetime.now().hour] + secs, 1)
+        state["dirty"] = True
+        return True
+
+    def kwin_scripting():
+        return dbus.Interface(bus.get_object("org.kde.KWin", "/Scripting"), "org.kde.kwin.Scripting")
+
+    def unload_script():
+        try: kwin_scripting().unloadScript(PLUGIN)
+        except dbus.DBusException: pass
+
+    def load_script():
+        try:
+            s = kwin_scripting()
+            s.unloadScript(PLUGIN)
+            s.loadScript(str(SCRIPT), PLUGIN, signature="ss")   # overloaded: pick (path, name)
+            s.start()
+        except dbus.DBusException as e:
+            print("could not load the KWin script:", e, file=sys.stderr)
+        return False
+
+    def on_lock(active):
+        count(); state["locked"] = bool(active)
+        if active: flush()
+
+    def on_kwin_owner(name, old, new):
+        if name == "org.kde.KWin" and new:
+            GLib.timeout_add_seconds(2, load_script)    # KWin restarted: its scripts are gone
+
+    name = dbus.service.BusName(BUS_NAME, bus)
+    Service(bus, "/")
+    bus.add_signal_receiver(on_lock, "ActiveChanged", "org.freedesktop.ScreenSaver")
+    bus.add_signal_receiver(on_kwin_owner, "NameOwnerChanged", "org.freedesktop.DBus", arg0="org.kde.KWin")
+    try:
+        state["locked"] = bool(dbus.Interface(bus.get_object("org.freedesktop.ScreenSaver", "/ScreenSaver"),
+                                              "org.freedesktop.ScreenSaver").GetActive())
+    except dbus.DBusException:
+        pass
+
+    GLib.timeout_add_seconds(TICK, count)
+    GLib.timeout_add_seconds(30, flush)
+    try:
+        from gi.repository import GLibUnix
+        add_signal = lambda sig, fn: GLibUnix.signal_add(GLib.PRIORITY_DEFAULT, sig, fn)
+    except ImportError:
+        add_signal = lambda sig, fn: GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sig, fn)
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        add_signal(sig, lambda *_: (count(), flush(), unload_script(), loop.quit()))
+    load_script()
+    loop.run()
+    _ = name
+
+
+def _call(method):
+    try:
+        import dbus
+        bus = dbus.SessionBus()
+        if not bus.name_has_owner(BUS_NAME):
+            return False
+        getattr(dbus.Interface(bus.get_object(BUS_NAME, "/"), IFACE), method)()
+        return True
+    except Exception:
+        return False
+
+
+def summary():
+    running = _call("Flush")
+    today = dt.date.today()
+    data = load_day(today)
+    apps = sorted(({"id": k, "name": v.get("name", k), "icon": v.get("icon", k), "secs": round(v.get("secs", 0))}
+                   for k, v in data["apps"].items()), key=lambda a: -a["secs"])
+    week = []
+    for i in range(6, -1, -1):
+        d = today - dt.timedelta(days=i)
+        dd = data if i == 0 else load_day(d)
+        week.append({"day": d.strftime("%a"), "date": d.isoformat(),
+                     "secs": round(sum(a.get("secs", 0) for a in dd["apps"].values()))})
+    print(json.dumps({
+        "running": running,
+        "total": week[-1]["secs"],
+        "yesterday": week[-2]["secs"],
+        "apps": apps[:6],
+        "others": sum(a["secs"] for a in apps[6:]),
+        "hours": [round(h) for h in data["hours"]],
+        "hour": dt.datetime.now().hour,
+        "week": week,
+    }))
+
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "summary"
+    if cmd == "daemon":
+        daemon()
+    elif cmd == "summary":
+        summary()
+    elif cmd == "quit":
+        sys.exit(0 if _call("Quit") else 1)
+    else:
+        print(__doc__); sys.exit(2)

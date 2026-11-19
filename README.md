@@ -56,6 +56,7 @@ Do Not Disturb on Meta+Shift+D.
 | `extras/vscode/` | **Frost Dark** editor theme for VS Code, Cursor and Antigravity (`build_theme.py` makes a `.vsix`). `install.sh` installs it in each editor and selects it; colour overrides you had for every theme are kept, under your previous theme's name. `--revert` switches back |
 | `extras/chromium/` | Frost Dark browser theme for Brave / Chrome. `install.sh` copies it to `~/.local/share/frost/chromium-theme` and prints the three clicks to load it (Chromium only takes local themes through its own page) |
 | `extras/notes/` | **Frost Notes**: a global scratchpad on **Alt+Y** (same key or Esc hides it). A small background process keeps the window ready, so it appears instantly, centred, on Frost glass. Search, many notes, autosave 0.4 s after you stop typing; each note is a plain `.md` in `~/.local/share/frost-notes/` (deleted ones go to its `trash/`). Markdown is styled as you type (headings, bold, lists, `- [ ]` tasks, code, links); Enter continues lists, Ctrl+B / Ctrl+I / Ctrl+K format, Ctrl+Enter or a click ticks a task, **Ctrl+E** shows it rendered. `install.sh` sets up the command, shortcut, autostart and KWin rule; `--remove` undoes it |
+| `extras/screentime/` | **Frost Screen Time** tracker for the Screen Time card: a small background process plus a KWin script that reports which app is active (only the app, never window titles). Counts seconds per app and per hour into one JSON file per day in `~/.local/share/frost/screentime/`; stops counting while the screen is locked or the laptop sleeps. `install.sh` installs and starts it (and at login); `--remove` stops it and keeps your history |
 | `extras/kwin/` | `install.sh`: the Frost Alt+Tab window switcher. `better-blur.sh`: **sudo.** Builds and switches on [Better Blur DX](https://github.com/xarblu/kwin-effects-better-blur-dx), so GTK apps and their menus get real frosted glass; `--rebuild` after a Plasma update, `--off` for KWin's own blur |
 | `extras/lockscreen/` | Frost lock screen (the Frost clock and a glass password card), built on Plasma's own lock screen so fingerprint, smartcard and media controls keep working. Installed by the main `install.sh`, used from the next login; `--test` shows it without locking, `--undo` goes back |
 | `extras/shell/` | `frost-dnd` (toggle Do Not Disturb) with `install-shortcuts.sh` for Meta+Shift+D, and `frost-prompt.bash`, the bash prompt in Frost colours |
@@ -88,6 +89,7 @@ Do Not Disturb on Meta+Shift+D.
 - **Calendar & Agenda**: Monday-first month grid with a coloured dot per kind of event, and what's coming up. Click a day, press **+** and type `09:30 Gym`, `Gym`, or `05/03/2004 Mom's bday` (another date, e.g. a birth date, so ages are counted). Pick Once / Weekly / Monthly / Yearly and a colour (birthday pink, anniversary purple, important red); "bday" / "anniversary" pick yearly and the colour for you. Right-click one of your events to delete it. Feeds in the widget settings, one per line: `link #colour Name +Word`: Indian holidays, Real Madrid fixtures (gold) and F1 races, qualifying and sprints (orange) by default; add your Google Calendar's secret iCal address (repeating events in feeds are expanded, with their exceptions). Reminders appear in the Dynamic Island 10 minutes before and at the start of timed events, at 9:00 for all-day ones (switch off in the settings).
 - **Quick Controls**: a phone-style control centre on a 4×4 grid. Round Wi-Fi / Bluetooth / Airplane / Tailscale bubbles (right-click Wi-Fi or Bluetooth for its list, click around the bubbles for all four with details), short brightness and volume faders (drag or scroll, click the speaker to mute), Focus (Do Not Disturb), Night Light, mic mute, Sound (outputs, inputs, per-app volume), region screenshot, System Settings and Power. The list pages swallow the scroll wheel so it never reaches the faders.
 - **Music**: artwork (thumbnail only for videos), live beat bars from `cava` (`code/beats.py`, local only, stops when idle), progress and controls. Appears only while something plays, hides 30 s after pausing.
+- **Screen Time**: today's total and the change since yesterday, a 24-hour strip (current hour in red), your top five apps with bars, and the last seven days. Needs the tracker: `extras/screentime/install.sh`. Click to refresh; it also updates every minute. Plasma on Wayland doesn't tell other programs how long you've been idle, so idle minutes before the screen locks still count.
 
 ## Change and reinstall
 
@@ -110,9 +112,9 @@ sudo ./system-install.sh --undo   # the previous login screen (fonts stay)
 ```
 
 The extras that change settings undo themselves: `extras/gtk`, `extras/vscode`, `extras/kwin` and
-`extras/cursors` with `--revert`, `extras/notes` with `--remove`, `extras/lockscreen`,
+`extras/cursors` with `--revert`, `extras/notes` and `extras/screentime` with `--remove`, `extras/lockscreen`,
 `extras/system-boot.sh` and `extras/system-zram.sh` with `--undo`. Your notes in
-`~/.local/share/frost-notes/` are never deleted.
+`~/.local/share/frost-notes/` and your screen-time history are never deleted.
 
 ## Licence
 

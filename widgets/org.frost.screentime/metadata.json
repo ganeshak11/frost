@@ -1,0 +1,14 @@
+{
+  "KPlugin": {
+    "Id": "org.frost.screentime",
+    "Name": "Screen Time",
+    "Description": "Today's screen time, by hour and by app, with the last seven days, on Obsidian glass",
+    "Icon": "preferences-desktop-screensaver",
+    "Category": "System Information",
+    "Authors": [{ "Name": "ganeshak11" }],
+    "License": "GPL-2.0+",
+    "Version": "1.0"
+  },
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0"
+}
