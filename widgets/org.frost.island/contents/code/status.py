@@ -3,14 +3,15 @@
 battery, microphone in use (by anything except cava), camera in use, screen
 being recorded or shared, connected Bluetooth devices, browser downloads in
 progress (Firefox .part / Chromium .crdownload files in ~/Downloads), the
-Frost Focus timer's state and the Frost Weather location (from widget settings)."""
+Frost Focus timer's state, the Frost Weather location (from widget settings) and
+a screenshot saved in the last few seconds (~/Pictures/Screenshots)."""
 import configparser, glob, json, os, subprocess
 
 def run(*a, t=3):
     try: return subprocess.run(a, capture_output=True, text=True, timeout=t).stdout
     except Exception: return ""
 
-out = {"battery": None, "mic": [], "cam": [], "rec": [], "bt": [], "dl": [], "recent": [], "focus": None, "loc": None}
+out = {"shot": None, "battery": None, "mic": [], "cam": [], "rec": [], "bt": [], "dl": [], "recent": [], "focus": None, "loc": None}
 
 bat = (glob.glob("/sys/class/power_supply/BAT*") or [None])[0]
 if bat:
@@ -67,6 +68,12 @@ for pat, browser in (("*.part", "Firefox"), ("*.crdownload", "Browser")):
 # finished files from the last 15 s (to tell a finished download from a cancelled one)
 out["recent"] = [os.path.basename(f) for f in glob.glob(os.path.expanduser("~/Downloads/*"))
                  if not f.endswith((".part", ".crdownload")) and time.time() - os.path.getmtime(f) < 15]
+
+# a screenshot that just landed in the screenshots folder
+shots = [f for f in glob.glob(os.path.expanduser("~/Pictures/Screenshots/*")) if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))]
+if shots:
+    f = max(shots, key=os.path.getmtime)
+    if time.time() - os.path.getmtime(f) < 6: out["shot"] = f
 
 for line in run("bluetoothctl", "devices", "Connected").splitlines():
     parts = line.split(" ", 2)

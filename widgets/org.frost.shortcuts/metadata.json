@@ -1,0 +1,14 @@
+{
+  "KPlugin": {
+    "Id": "org.frost.shortcuts",
+    "Name": "Shortcut Sheet",
+    "Description": "A glass cheat sheet of every Frost and desktop shortcut, read live from your shortcut settings. Meta+/ opens it, or type ? in Spotlight",
+    "Icon": "input-keyboard",
+    "Category": "Utilities",
+    "Authors": [{ "Name": "ganeshak11" }],
+    "License": "GPL-2.0+",
+    "Version": "1.0"
+  },
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

@@ -9,6 +9,7 @@
 //   project names   your folders in ~/dev: Enter = VS Code, Ctrl+Enter = kitty, Shift+Enter = Dolphin
 //   file names      anywhere in your home (plocate's daily index): Enter = open, Shift+Enter = show in Dolphin
 //   > command       runs it in a new kitty window
+//   ?               the Shortcut Sheet (every Frost shortcut; also Meta+/)
 //   gh: words       your GitHub repositories, or a GitHub search
 //
 //   type        search            Up / Down    move           Enter   open
@@ -86,7 +87,16 @@ PlasmoidItem {
         }
     }
     // decide from `query` itself: isGh may not be re-evaluated yet inside this handler
-    onQueryChanged: { fileTimer.restart(); if (query.toLowerCase().startsWith("gh:") && !repos.length) exec.connectSource(devPy + " repos") }
+    onQueryChanged: {
+        if (query === "?" && openSheet()) return
+        fileTimer.restart(); if (query.toLowerCase().startsWith("gh:") && !repos.length) exec.connectSource(devPy + " repos")
+    }
+    // "?" on its own opens the Shortcut Sheet (org.frost.shortcuts, beside the island)
+    function openSheet() {
+        const all = Plasmoid.containment ? Plasmoid.containment.applets : []
+        for (const a of all) if (a.pluginName === "org.frost.shortcuts") { close(); Qt.callLater(() => a.activated()); return true }
+        return false
+    }
 
     // fuzzy: whole-word prefix > substring > letters in order (fr -> frost, fortis)
     function score(text, t) {

@@ -4,7 +4,8 @@
 //                 buttons to send it a file or ring it
 //   Tailscale     your private network: this laptop's address and up to three of
 //                 your other devices (online with their address, or last seen)
-// A red bubble means connected. Click an address to copy it.
+// A red bubble means connected. Click an address to copy it. Drag files onto
+// the phone module to send them (like AirDrop).
 // A small helper script collects everything in one read-only pass every 20 seconds.
 import QtQuick
 import QtQuick.Layouts
@@ -54,6 +55,8 @@ PlasmoidItem {
     }
 
     property string sendTo: ""
+    property int sent: 0                         // files just dropped on the phone, for a moment
+    Timer { id: sentTimer; interval: 1800; onTriggered: root.sent = 0 }
     FileDialog {
         id: picker
         title: "Send a file to your phone"
@@ -175,9 +178,54 @@ PlasmoidItem {
                 }
             }
 
-            // ---- phone (KDE Connect)
+            // ---- phone (KDE Connect); drop files on it to send them
             Module {
+                id: phoneMod
                 Layout.preferredWidth: 176; Layout.fillHeight: true
+                readonly property bool reachable: !!root.phone && root.phone.reachable
+                border.width: drop.containsDrag ? 2 : 0
+                border.color: reachable ? c.accent : c.subtle
+                scale: drop.containsDrag && reachable ? 1.03 : 1
+                Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                DropArea {
+                    id: drop
+                    anchors.fill: parent
+                    keys: ["text/uri-list"]
+                    onDropped: (d) => {
+                        if (!phoneMod.reachable || !d.hasUrls) return
+                        const files = d.urls.map(u => String(u)).filter(u => u.startsWith("file://"))
+                        for (const f of files)
+                            exec.connectSource("kdeconnect-cli -d " + root.shq(root.phone.id) + " --share " + root.shq(decodeURIComponent(f.replace("file://", ""))))
+                        if (files.length) { root.sent = files.length; sentTimer.restart() }
+                        d.acceptProposedAction()
+                    }
+                }
+                Rectangle {   // "drop to send" over the module while something is dragged onto it
+                    anchors.fill: parent
+                    radius: parent.radius
+                    z: 5
+                    color: phoneMod.reachable ? Qt.rgba(242/255, 29/255, 67/255, 0.88) : Qt.rgba(0.1, 0.1, 0.12, 0.92)
+                    opacity: drop.containsDrag || root.sent > 0 ? 1 : 0
+                    visible: opacity > 0.01
+                    Behavior on opacity { NumberAnimation { duration: 160 } }
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 6
+                        Kirigami.Icon {
+                            Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 28; Layout.preferredHeight: 28
+                            isMask: true; color: "white"
+                            source: root.sent > 0 ? "dialog-ok-apply-symbolic" : phoneMod.reachable ? "document-send-symbolic" : "smartphone-symbolic"
+                        }
+                        Text {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: root.sent > 0 ? (root.sent === 1 ? "Sent to " : root.sent + " files sent to ") + (root.phone ? root.phone.name : "phone")
+                                  : phoneMod.reachable ? "Drop to send" : "Phone not connected"
+                            color: "white"; font.pixelSize: 12; font.weight: Font.DemiBold
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.WordWrap; Layout.maximumWidth: phoneMod.width - 24
+                        }
+                    }
+                }
                 ColumnLayout {
                     anchors { fill: parent; margins: 12 }
                     spacing: 0

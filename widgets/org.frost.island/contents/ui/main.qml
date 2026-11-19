@@ -11,8 +11,9 @@
 //   two at once  the most important one in the pill, the next as a bubble
 //   privacy      green dot = camera in use, orange dot = microphone in use
 // Events briefly expand it into a banner, then it shrinks back:
-//   notifications (click to open, hover to keep it), charger plugged in or
-//   out, low battery, Bluetooth device connected, Do Not Disturb on/off,
+//   notifications (click to open, hover to keep it), charger plugged in
+//   (a wide pill whose battery fills up) or out, a screenshot (thumbnail: drag
+//   it anywhere, click to open, Copy / Show in Folder), low battery, Bluetooth device connected, Do Not Disturb on/off,
 //   timer finished, download finished, rain expected within the hour
 // Click the pill to expand it: full music player, big focus timer, or (when
 // idle) date, battery, devices and your latest notifications. It collapses
@@ -102,6 +103,7 @@ PlasmoidItem {
         id: exec; engine: "executable"
         onNewData: (src, data) => {
             if (src === root.statusCmd) { try { root.applyStatus(JSON.parse(data["stdout"])) } catch (e) {} }
+            else if (src.startsWith(": frost-shot;")) { const f = (data["stdout"] || "").trim(); if (f) root.showShot(f) }
             disconnectSource(src)
         }
     }
@@ -115,7 +117,7 @@ PlasmoidItem {
         const b = s.battery, ob = old.battery
         if (b && ob) {
             const plugged = (x) => x.ac !== undefined ? x.ac : x.status !== "Discharging"
-            if (plugged(b) && !plugged(ob)) banner({ icon: "battery-charging", title: "Charging", value: b.pct + "%", tint: "#4ade80", battery: b.pct })
+            if (plugged(b) && !plugged(ob)) banner({ kind: "charge", pct: b.pct })
             else if (!plugged(b) && plugged(ob)) banner({ icon: "battery-full", title: "On battery", value: b.pct + "%", battery: b.pct })
             if (!plugged(b) && b.pct <= 20 && ob.pct > 20) banner({ icon: "battery-caution", title: "Low battery", value: b.pct + "%", tint: accent, battery: b.pct })
         }
@@ -129,6 +131,7 @@ PlasmoidItem {
                      value: ok ? "Downloaded" : "Stopped", tint: ok ? "#4ade80" : muted,
                      url: ok ? "file://" + d.path.replace(/\.(part|crdownload)$/, "") : "" })
         }
+        if (s.shot && s.shot !== old.shot) showShot(s.shot)
         for (const d of s.bt) if (!(old.bt || []).includes(d)) banner({ icon: "audio-headphones", title: d, value: "Connected" })
         for (const d of (old.bt || [])) if (!s.bt.includes(d)) banner({ icon: "bluetooth-disabled", title: d, value: "Disconnected" })
     }
@@ -245,6 +248,16 @@ PlasmoidItem {
                 const urgent = notes.data(ix, NotificationManager.Notifications.UrgencyRole) === NotificationManager.Notifications.CriticalUrgency
                 if (root.dnd && !urgent) continue
                 if (!root.ready) continue
+                const app = notes.data(ix, NotificationManager.Notifications.ApplicationNameRole) || ""
+                const desk = notes.data(ix, NotificationManager.Notifications.DesktopEntryRole) || ""
+                if (desk === "org.kde.spectacle" || app === "Spectacle") {
+                    const urls = notes.data(ix, NotificationManager.Notifications.UrlsRole) || []
+                    const f = urls.length ? String(urls[0]).replace("file://", "") : ""
+                    if (f && /\.(png|jpe?g|webp)$/i.test(f)) root.showShot(decodeURIComponent(f))
+                    else exec.connectSource(root.clipShotCmd)     // copied only: take it from the clipboard
+                    notes.expire(ix)
+                    continue
+                }
                 root.banner({
                     icon: notes.data(ix, NotificationManager.Notifications.ApplicationIconNameRole) || notes.data(ix, NotificationManager.Notifications.IconNameRole) || "dialog-information",
                     image: notes.data(ix, NotificationManager.Notifications.ImageRole) || "",
@@ -328,9 +341,29 @@ PlasmoidItem {
         if (!queue.length) { current = null; return }
         current = queue[0]; queue = queue.slice(1)
         isOpen = false
-        bannerTimer.interval = current.urgent ? 10000 : 4500
+        bannerTimer.interval = current.urgent ? 10000 : current.kind === "shot" ? 7000 : current.kind === "charge" ? 3200 : 4500
         bannerTimer.restart()
         if (!dnd || current.alarm) exec.connectSource(soundCmd)
+    }
+    // ---- screenshots: a thumbnail banner (from Spectacle's notification, the
+    // clipboard when it only copied, or a new file in ~/Pictures/Screenshots)
+    function shq(x) { return "'" + String(x).replace(/'/g, "'\\''") + "'" }
+    property string lastShot: ""
+    function showShot(path) {
+        if (!path || path === lastShot) return
+        lastShot = path
+        copiedShot = false
+        if (current && current.kind === "shot") { current = null }   // a newer one replaces it
+        banner({ kind: "shot", path: path })
+    }
+    readonly property string clipShotCmd: ': frost-shot; d="${XDG_RUNTIME_DIR:-/tmp}/frost-shots"; mkdir -p "$d"; '
+        + 'find "$d" -name "*.png" -mmin +60 -delete; f="$d/Screenshot_$(date +%Y%m%d_%H%M%S).png"; '
+        + 'sleep 0.4; wl-paste -t image/png > "$f" 2>/dev/null && [ -s "$f" ] && echo "$f"'
+    property bool copiedShot: false
+    function copyShot(path) {
+        exec.connectSource("wl-copy -t image/png < " + shq(path))
+        copiedShot = true
+        bannerTimer.restart()
     }
     // a soft pop for each banner (none during Do Not Disturb)
     readonly property string soundFile: Qt.resolvedUrl("../sounds/pop.wav").toString().replace("file://", "")
@@ -371,7 +404,9 @@ PlasmoidItem {
                                         : primary === "timer" || primary === "stopwatch" ? Qt.size(176, pillH)
                                         : Qt.size(charging || micInUse || camInUse ? 150 : 118, pillH)
     readonly property size targetSize: mode === "hud" ? Qt.size(300, 40)
-                                     : mode === "banner" ? Qt.size(current.body ? 420 : 340, current.body ? 84 : 64)
+                                     : mode === "banner" ? (current.kind === "charge" ? Qt.size(300, 44)
+                                                          : current.kind === "shot" ? Qt.size(400, 108)
+                                                          : Qt.size(current.body ? 420 : 340, current.body ? 84 : 64))
                                      : mode === "expanded" ? (primary === "music" ? Qt.size(440, 176) : primary === "focus" ? Qt.size(360, 150)
                                                             : primary === "job" || primary === "dl" ? Qt.size(400, 150)
                                                             : primary === "rec" ? Qt.size(340, 110)
@@ -650,6 +685,7 @@ PlasmoidItem {
                 HoverHandler { id: popArea }
                 TapHandler {
                     onTapped: {
+                        if (root.current && root.current.kind === "shot") return   // its thumbnail and buttons do the work
                         if (root.current && root.current.notifId) root.openNotification(root.current.notifId)
                         if (root.current && root.current.url) Qt.openUrlExternally(root.current.url)
                         if (root.current) { bannerTimer.stop(); root.nextBanner() }
@@ -695,7 +731,7 @@ PlasmoidItem {
 
                     // banner
                     RowLayout {
-                        visible: root.mode === "banner"
+                        visible: root.mode === "banner" && !root.current.kind
                         anchors { fill: parent; margins: 14; leftMargin: 16; rightMargin: 20 }
                         spacing: 12
                         Rectangle {
@@ -706,7 +742,7 @@ PlasmoidItem {
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 1
                             Text { visible: !!(root.current && root.current.app); text: root.current ? (root.current.app || "") : ""; color: root.muted; font.pixelSize: 10; font.letterSpacing: 1 }
-                            Text { text: root.current ? root.current.title : ""; color: root.text; font.pixelSize: 14; elide: Text.ElideRight; Layout.fillWidth: true }
+                            Text { text: root.current ? (root.current.title || "") : ""; color: root.text; font.pixelSize: 14; elide: Text.ElideRight; Layout.fillWidth: true }
                             Text { visible: !!(root.current && root.current.body); text: root.current ? (root.current.body || "") : ""; color: root.muted; font.pixelSize: 12; elide: Text.ElideRight; maximumLineCount: 2; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                         }
                         Text {
@@ -714,6 +750,104 @@ PlasmoidItem {
                             text: root.current ? (root.current.value || "") : ""
                             color: root.current && root.current.tint ? root.current.tint : root.text
                             font.family: root.mono; font.pixelSize: 15
+                        }
+                    }
+
+                    // charger plugged in: a wide, short pill with a battery that fills up
+                    RowLayout {
+                        id: chargeRow
+                        visible: root.mode === "banner" && root.current.kind === "charge"
+                        anchors { fill: parent; leftMargin: 18; rightMargin: 14 }
+                        spacing: 10
+                        property real fill: 0
+                        NumberAnimation { id: chargeFill; target: chargeRow; property: "fill"; from: 0; duration: 1100; easing.type: Easing.OutCubic }
+                        onVisibleChanged: if (visible) { chargeFill.to = Math.max(0.04, (root.current.pct || 0) / 100); chargeFill.restart() }
+                        Text { text: "Charging"; color: root.text; font.pixelSize: 14; Layout.fillWidth: true }
+                        Text {
+                            text: Math.round(chargeRow.fill * 100) + "%"
+                            color: "#4ade80"; font.family: root.mono; font.pixelSize: 15
+                        }
+                        Item {
+                            Layout.preferredWidth: 42; Layout.preferredHeight: 20
+                            Rectangle {
+                                id: cell
+                                width: 38; height: 20; radius: 6
+                                color: "transparent"; border.color: Qt.rgba(1, 1, 1, 0.35); border.width: 1.5
+                                Rectangle {
+                                    x: 3; y: 3; height: parent.height - 6; radius: 3
+                                    width: (parent.width - 6) * chargeRow.fill
+                                    color: "#4ade80"
+                                    SequentialAnimation on opacity {   // a gentle breathing glow while it's up
+                                        running: chargeRow.visible; loops: Animation.Infinite
+                                        NumberAnimation { to: 0.7; duration: 900; easing.type: Easing.InOutSine }
+                                        NumberAnimation { to: 1; duration: 900; easing.type: Easing.InOutSine }
+                                    }
+                                }
+                                Text { anchors.centerIn: parent; text: "⚡"; color: "white"; font.pixelSize: 11; style: Text.Outline; styleColor: "#14532d" }
+                            }
+                            Rectangle { x: cell.width + 1; y: 7; width: 3; height: 6; radius: 1.5; color: Qt.rgba(1, 1, 1, 0.35) }
+                        }
+                    }
+
+                    // screenshot: thumbnail to drag anywhere or click to open; copy / show in folder
+                    RowLayout {
+                        visible: root.mode === "banner" && root.current.kind === "shot"
+                        anchors { fill: parent; margins: 12; leftMargin: 16; rightMargin: 16 }
+                        spacing: 14
+                        readonly property string url: root.current && root.current.path ? "file://" + root.current.path : ""
+                        Rectangle {
+                            id: thumb
+                            Layout.preferredWidth: 136; Layout.preferredHeight: 84
+                            radius: 12; color: Qt.rgba(1, 1, 1, 0.08); clip: true
+                            border.color: thumbM.containsMouse ? Qt.rgba(1, 1, 1, 0.45) : Qt.rgba(1, 1, 1, 0.15)
+                            scale: thumbM.pressed ? 0.96 : 1
+                            Behavior on scale { NumberAnimation { duration: 110 } }
+                            Image {
+                                id: thumbImg
+                                anchors { fill: parent; margins: 1 }
+                                source: parent.parent.url; asynchronous: true; cache: false
+                                fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(272, 168)
+                            }
+                            Item {   // what gets dragged: the file itself
+                                id: dragProxy
+                                width: thumb.width; height: thumb.height
+                                Drag.active: thumbM.drag.active
+                                Drag.dragType: Drag.Automatic
+                                Drag.supportedActions: Qt.CopyAction
+                                Drag.mimeData: ({ "text/uri-list": thumb.parent.url + "\r\n" })
+                            }
+                            MouseArea {
+                                id: thumbM
+                                anchors.fill: parent
+                                hoverEnabled: true; cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                                drag.target: dragProxy
+                                onPressed: thumbImg.grabToImage(r => { dragProxy.Drag.imageSource = r.url }, Qt.size(136, 84))
+                                onClicked: { Qt.openUrlExternally(thumb.parent.url); root.nextBanner() }
+                                onReleased: { dragProxy.x = 0; dragProxy.y = 0 }
+                            }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 3
+                            Text { text: "Screenshot"; color: root.text; font.pixelSize: 15 }
+                            Text { text: root.copiedShot ? "Copied to clipboard" : "Drag it anywhere · click to open"
+                                   color: root.copiedShot ? "#4ade80" : root.muted; font.pixelSize: 11
+                                   elide: Text.ElideRight; Layout.fillWidth: true }
+                            RowLayout {
+                                Layout.topMargin: 5; spacing: 6
+                                component ShotBtn: Rectangle {
+                                    id: sb
+                                    property string label
+                                    signal hit()
+                                    implicitWidth: sbT.implicitWidth + 22; implicitHeight: 26; radius: 13
+                                    color: sbM.containsMouse ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.12)
+                                    scale: sbM.pressed ? 0.94 : 1
+                                    Behavior on scale { NumberAnimation { duration: 100 } }
+                                    Text { id: sbT; anchors.centerIn: parent; text: sb.label; color: root.text; font.pixelSize: 12 }
+                                    MouseArea { id: sbM; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: sb.hit() }
+                                }
+                                ShotBtn { label: "Copy"; onHit: root.copyShot(root.current.path) }
+                                ShotBtn { label: "Show in Folder"; onHit: { exec.connectSource("dolphin --select " + root.shq(root.current.path) + " >/dev/null 2>&1 &"); root.nextBanner() } }
+                            }
                         }
                     }
 
@@ -1045,14 +1179,24 @@ PlasmoidItem {
         }
     }
 
-    // for testing on its own: `plasmawindowed org.frost.island frost-test:open` logs the sizes
+    // for testing on its own: `plasmawindowed org.frost.island frost-test:open` logs the sizes;
+    // frost-test:charge or frost-test:shot:/path.png [frost-shot:/out.png] show (and picture) a banner
     Timer {
         interval: 1500; running: Qt.application.name === "plasmawindowed"
         onTriggered: {
-            if (!Qt.application.arguments.find(x => x === "frost-test:open")) return
-            root.isOpen = true
-            testLog.start()
+            const args = Qt.application.arguments
+            root.ready = true
+            const shot = args.find(x => x.startsWith("frost-test:shot:"))
+            const snap = args.find(x => x.startsWith("frost-shot:"))
+            if (args.includes("frost-test:charge")) root.banner({ kind: "charge", pct: 76 })
+            else if (shot) root.showShot(shot.slice(16))
+            else if (args.includes("frost-test:open")) { root.isOpen = true; testLog.start() }
+            if (snap) bannerShot.start()
         }
+    }
+    Timer {   // a picture of the floating island, for checking banners
+        id: bannerShot; interval: 1800
+        onTriggered: stage.grabToImage(r => { r.saveToFile(Qt.application.arguments.find(x => x.startsWith("frost-shot:")).slice(11)); Qt.quit() })
     }
     Timer {   // logs the biggest the shape got while open, then quits
         id: testLog; interval: 3500

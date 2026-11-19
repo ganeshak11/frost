@@ -67,7 +67,7 @@ dock.location = "bottom"; dock.floating = true; dock.hiding = "autohide";
 dock.lengthMode = "fit"; dock.alignment = "center";
 dock.height = 94;                        // 24 px clear band (magnified icons) + the 70 px bar
 
-for (const w of top.widgets()) if (!["org.frost.island", "org.frost.spotlight", "org.frost.controlcentre"].includes(w.type)) w.remove();
+for (const w of top.widgets()) if (!["org.frost.island", "org.frost.spotlight", "org.frost.controlcentre", "org.frost.shortcuts"].includes(w.type)) w.remove();
 const island = top.widgets().find(w => w.type == "org.frost.island") || top.addWidget("org.frost.island");
 if (!island.globalShortcut) island.globalShortcut = "Meta+Alt+I";   // open / close the island
 // Spotlight: a 1 px widget beside the island; it's the "launcher", so the Meta
@@ -76,8 +76,11 @@ const spot = top.widgets().find(w => w.type == "org.frost.spotlight") || top.add
 // Control Centre: another 1 px widget; Meta+Alt+C, or right-click / scroll down on the island
 const cc = top.widgets().find(w => w.type == "org.frost.controlcentre") || top.addWidget("org.frost.controlcentre");
 if (!cc.globalShortcut) cc.globalShortcut = "Meta+Alt+C";
+// Shortcut Sheet: a 1 px widget too; Meta+/ (or "?" in Spotlight) shows every shortcut
+const keys = top.widgets().find(w => w.type == "org.frost.shortcuts") || top.addWidget("org.frost.shortcuts");
+if (!keys.globalShortcut) keys.globalShortcut = "Meta+/";
 top.currentConfigGroup = ["General"];
-top.writeConfig("AppletOrder", [island.id, spot.id, cc.id].join(";"));
+top.writeConfig("AppletOrder", [island.id, spot.id, cc.id, keys.id].join(";"));
 top.location = "top"; top.height = 40; top.hiding = "windowsgobelow"; top.floating = false;
 top.lengthMode = "fit"; top.alignment = "center"; top.offset = 0;
 // ---- cards
