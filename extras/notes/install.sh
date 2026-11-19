@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Frost Notes (no sudo): a global notes window on Meta+Alt+N, same key closes it.
+# Frost Notes (no sudo): a global notes window on Alt+Y, same key closes it.
 #   extras/notes/install.sh            install, bind the key, start the background process
 #   extras/notes/install.sh --remove   undo all of it (your notes in ~/.local/share/frost-notes stay)
 set -euo pipefail
@@ -55,17 +55,27 @@ if [ "$(kreadconfig6 --file kwinrc --group Plugins --key better_blur_dxEnabled)"
 fi
 reload
 
-# Meta+Alt+N
+# Alt+Y: first free it from whatever else holds it, then bind it
 python3 - <<'PY'
-import dbus
+import configparser, os, dbus
 ga = dbus.Interface(dbus.SessionBus().get_object("org.kde.kglobalaccel", "/kglobalaccel"), "org.kde.KGlobalAccel")
+cp = configparser.RawConfigParser(strict=False); cp.optionxform = str
+cp.read(os.path.expanduser("~/.config/kglobalshortcutsrc"))
+for sec in cp.sections():
+    if sec.startswith("services][") and not sec.endswith("frost-notes.desktop"):
+        comp = sec[len("services]["):]
+        for key, val in cp[sec].items():
+            if "Alt+Y" in val.split(",")[0].split("\t"):
+                try: ga.setForeignShortcutKeys([comp, key, "", ""], dbus.Array([], signature="(ai)")); print("freed Alt+Y from", comp)
+                except Exception as e: print("could not free Alt+Y from", comp, e)
 aid = ["frost-notes.desktop", "_launch", "Frost Notes", "Frost Notes"]
 ga.doRegister(aid)
-ga.setForeignShortcutKeys(aid, dbus.Array([dbus.Struct((dbus.Array([0x10000000 | 0x08000000 | 0x4E, 0, 0, 0], signature="i"),))], signature="(ai)"))
+# flags 2|4 = SetPresent|NoAutoloading: without "present" KDE keeps the key assigned but never grabs it
+ga.setShortcut(aid, dbus.Array([0x08000000 | 0x59], signature="i"), dbus.UInt32(2 | 4))
 PY
 
 # start the background process now, hidden, so the first press is instant too
 if ! ~/.local/bin/frost-notes hide 2>/dev/null; then :; fi
 pgrep -f "frost-notes daemon" >/dev/null || (setsid -f ~/.local/bin/frost-notes daemon >/dev/null 2>&1 || true)
-echo "Frost Notes installed. Meta+Alt+N shows it; the same key (or Esc) hides it."
+echo "Frost Notes installed. Alt+Y shows it; the same key (or Esc) hides it."
 echo "Notes are plain .md files in ~/.local/share/frost-notes/."

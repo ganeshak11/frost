@@ -536,7 +536,9 @@ PlasmoidItem {
                     Layout.preferredHeight: Math.min(contentHeight, root.maxListH)
                     visible: count > 0
                     interactive: false
+                    clip: true                 // more results than fit would draw over Plasma's list below
                     model: root.devItems
+                    onCountChanged: Qt.callLater(forceLayout)
                     section.property: "group"
                     section.criteria: ViewSection.FullString
                     delegate: ResultRow {
@@ -572,6 +574,10 @@ PlasmoidItem {
                     keyNavigationWraps: true
                     currentIndex: 0
                     cacheBuffer: 2000          // keep every result instantiated, for Tab between groups
+                    // row heights depend on the group headers, which settle a moment after the rows are
+                    // created; while typing fast that left stale rows drawn on top of each other
+                    onCountChanged: Qt.callLater(forceLayout)
+                    onContentHeightChanged: Qt.callLater(forceLayout)
                     QQC2.ScrollBar.vertical: QQC2.ScrollBar { policy: QQC2.ScrollBar.AsNeeded }
 
                     model: Milou.ResultsModel {

@@ -1,13 +1,13 @@
 {
   "KPlugin": {
     "Id": "org.frost.controls",
-    "Name": "Quick Command Centre",
-    "Description": "Wi-Fi, Bluetooth, Night Light, Do Not Disturb, Tailscale and power on Obsidian glass",
+    "Name": "Quick Controls",
+    "Description": "A phone-style control centre on Obsidian glass: Wi-Fi, Bluetooth, Airplane mode and Tailscale, brightness and volume faders, Focus, Night Light, microphone, sound outputs, screenshot, settings and power",
     "Icon": "preferences-system",
     "Category": "System Information",
     "Authors": [{ "Name": "ganeshak11" }],
     "License": "GPL-2.0+",
-    "Version": "1.0"
+    "Version": "2.0"
   },
   "KPackageStructure": "Plasma/Applet",
   "X-Plasma-API-Minimum-Version": "6.0"

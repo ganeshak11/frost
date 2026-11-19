@@ -12,7 +12,7 @@
 #   Left:   Chronos (wide) / Weather + Focus (two small squares) /
 #           Device Ecosystem (wide, short) / Music (only while something plays)
 #   Right:  System Observatory (extra wide, top) / Calendar & Agenda /
-#           Quick Controls (tall and narrow, bottom corner)
+#           Quick Controls (phone-style square, bottom corner)
 # Safe to run again. Restarts plasmashell once. Backs up the panel config first;
 # ./revert.sh restores the look you had before Frost.
 set -euo pipefail
@@ -123,7 +123,7 @@ place = {   # applet: x, y, w, h
     "$music":   ($M,              $((B - 272)),    560, 272),
     "$obs":     ($((R - 640)),    $T,              640, 208),
     "$cal":     ($((R - 400)),    $((T + 224)),    400, 320),
-    "$ctl":     ($((R - 288)),    $((B - 368)),    288, 368),
+    "$ctl":     ($((R - 288)),    $((B - 288)),    288, 288),
 }
 # the file as [header, body] sections (body keeps its trailing newlines)
 secs = [[m.group(1), m.group(2)] for m in re.finditer(r"^(\[[^\n]*\])\n((?:(?!\[)[^\n]*\n)*)", open(path).read(), re.M)]

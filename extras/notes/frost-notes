@@ -8,7 +8,7 @@
 
 The window lives in a background process, so showing it is instant. Every note is a plain
 .md file in ~/.local/share/frost-notes/, saved as you type. Deleted notes go to its trash/.
-Bound to Meta+Alt+N by extras/notes/install.sh.
+Bound to Alt+Y by extras/notes/install.sh.
 """
 import os
 import socket
