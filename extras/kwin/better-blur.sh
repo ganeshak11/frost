@@ -19,7 +19,7 @@ fx() { qdbus6 org.kde.KWin /Effects "org.kde.kwin.Effects.$1" "$2" >/dev/null 2>
 CLASSES=(
   blueman-manager blueman-adapters blueman-services nm-connection-editor
   org.gnome.Loupe org.gnome.gedit gedit org.gnome.SystemMonitor gnome-system-monitor
-  qalculate-gtk zenity org.gnome.Zenity yelp org.gnome.Yelp audacious
+  frost-notes qalculate-gtk zenity org.gnome.Zenity yelp org.gnome.Yelp audacious
 )
 
 if [ "${1:-}" = "--off" ]; then

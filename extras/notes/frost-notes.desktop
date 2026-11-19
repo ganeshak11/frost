@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Frost Notes
+Comment=Global scratchpad: Meta+Alt+N shows and hides it
+Exec=frost-notes toggle
+Icon=accessories-text-editor
+Categories=Utility;TextEditor;
+StartupNotify=false
+X-KDE-GlobalAccel-CommandShortcut=true

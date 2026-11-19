@@ -1,0 +1,522 @@
+#!/usr/bin/env python3
+"""Frost Notes: a global scratchpad that appears the instant you press its shortcut.
+
+  frost-notes toggle    show the notes window, or hide it if it is already open
+  frost-notes show|hide
+  frost-notes daemon    start the background process (autostart does this at login)
+  frost-notes quit
+
+The window lives in a background process, so showing it is instant. Every note is a plain
+.md file in ~/.local/share/frost-notes/, saved as you type. Deleted notes go to its trash/.
+Bound to Meta+Alt+N by extras/notes/install.sh.
+"""
+import os
+import socket
+import sys
+
+SOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "frost-notes.sock")
+DATA = os.path.expanduser("~/.local/share/frost-notes")
+
+
+def send(cmd):
+    """Tell the running daemon what to do. Plain sockets: no Qt import, so it is quick."""
+    try:
+        s = socket.socket(socket.AF_UNIX)
+        s.settimeout(0.5)
+        s.connect(SOCK)
+        s.sendall(cmd.encode() + b"\n")
+        s.close()
+        return True
+    except OSError:
+        return False
+
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "toggle"
+    if cmd != "daemon" and send(cmd):
+        sys.exit(0)
+    if cmd in ("hide", "quit"):
+        sys.exit(0)
+    # no daemon yet: become it (and show the window, unless started from autostart)
+    os.environ.setdefault("QT_QPA_PLATFORM", "wayland")
+    os.environ.setdefault("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1")
+
+import json
+import re
+import signal
+import time
+
+from PyQt6.QtCore import QEvent, QObject, QPointF, QRectF, QSize, Qt, QTimer
+from PyQt6.QtGui import (QAction, QColor, QFont, QFontMetrics, QKeySequence, QPainter, QPainterPath, QPen,
+                         QShortcut, QTextCursor)
+from PyQt6.QtNetwork import QLocalServer
+from PyQt6.QtWidgets import (QApplication, QStyledItemDelegate, QStyle, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
+                             QPlainTextEdit, QPushButton, QSizeGrip, QVBoxLayout, QWidget)
+
+ACCENT = "#F21D43"
+TEXT = "#F2F2F5"
+MUTED = "#9A9AA6"
+UI_FONT = "Rufscript"
+MONO = "JetBrains Mono"
+
+STYLE = f"""
+QWidget {{ color: {TEXT}; font-family: "{UI_FONT}"; font-size: 13px; }}
+QLineEdit {{ background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.08);
+             border-radius: 10px; padding: 7px 11px; selection-background-color: {ACCENT}; }}
+QLineEdit:focus {{ border: 1px solid rgba(242,29,67,0.7); }}
+QListWidget {{ background: transparent; border: none; outline: none; }}
+QListWidget::item {{ border-radius: 10px; padding: 8px 10px; margin: 1px 0; }}
+QListWidget::item:hover {{ background: rgba(255,255,255,0.07); }}
+QListWidget::item:selected {{ background: rgba(242,29,67,0.22); }}
+QPlainTextEdit {{ background: transparent; border: none; font-family: "{MONO}"; font-size: 14px;
+                  selection-background-color: {ACCENT}; selection-color: white; }}
+QPushButton {{ background: rgba(255,255,255,0.07); border: none; border-radius: 10px; padding: 6px 12px; }}
+QPushButton:hover {{ background: rgba(255,255,255,0.14); }}
+QPushButton#danger:hover {{ background: {ACCENT}; color: white; }}
+QPushButton#add {{ background: {ACCENT}; color: white; font-size: 17px; padding: 3px 12px; }}
+QPushButton#add:hover {{ background: #ff3558; }}
+QLabel#muted {{ color: {MUTED}; font-size: 12px; }}
+QScrollBar:vertical {{ background: transparent; width: 8px; margin: 2px; }}
+QScrollBar::handle:vertical {{ background: rgba(255,255,255,0.18); border-radius: 3px; min-height: 30px; }}
+QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; }}
+QScrollBar::add-page, QScrollBar::sub-page {{ background: none; }}
+"""
+
+
+def title_of(text):
+    for line in text.splitlines():
+        line = line.strip().lstrip("#").strip()
+        if line:
+            return line
+    return "New note"
+
+
+def ago(t):
+    d = time.time() - t
+    if d < 60:
+        return "now"
+    if d < 3600:
+        return f"{int(d // 60)} min"
+    if d < 86400:
+        return f"{int(d // 3600)} h"
+    if d < 7 * 86400:
+        return time.strftime("%a", time.localtime(t))
+    return time.strftime("%d %b", time.localtime(t))
+
+
+class Row(QStyledItemDelegate):
+    """Title in white, age in muted grey, both elided to the sidebar."""
+
+    def paint(self, p, opt, idx):
+        title, age = idx.data(Qt.ItemDataRole.DisplayRole).split("\n", 1)
+        r = QRectF(opt.rect).adjusted(2, 1, -2, -1)
+        if opt.state & QStyle.StateFlag.State_Selected:
+            bg = QColor(242, 29, 67, 56)
+        elif opt.state & QStyle.StateFlag.State_MouseOver:
+            bg = QColor(255, 255, 255, 18)
+        else:
+            bg = None
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if bg:
+            path = QPainterPath()
+            path.addRoundedRect(r, 10, 10)
+            p.fillPath(path, bg)
+        p.setFont(opt.font)
+        fm = QFontMetrics(opt.font)
+        p.setPen(QColor(TEXT))
+        p.drawText(QPointF(r.left() + 10, r.top() + 22), fm.elidedText(title, Qt.TextElideMode.ElideRight, int(r.width() - 20)))
+        p.setPen(QColor(MUTED))
+        f = QFont(opt.font)
+        f.setPixelSize(11)
+        p.setFont(f)
+        p.drawText(QPointF(r.left() + 10, r.top() + 40), age)
+
+
+class Store:
+    """One .md file per note. Writes are atomic, so a crash never leaves half a note."""
+
+    def __init__(self):
+        os.makedirs(os.path.join(DATA, "trash"), exist_ok=True)
+        self.state_path = os.path.join(DATA, "state.json")
+
+    def path(self, nid):
+        return os.path.join(DATA, nid + ".md")
+
+    def ids(self):
+        out = []
+        for f in os.listdir(DATA):
+            if f.endswith(".md"):
+                p = os.path.join(DATA, f)
+                out.append((os.path.getmtime(p), f[:-3]))
+        return [i for _, i in sorted(out, reverse=True)]
+
+    def read(self, nid):
+        try:
+            with open(self.path(nid), encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            return ""
+
+    def mtime(self, nid):
+        try:
+            return os.path.getmtime(self.path(nid))
+        except OSError:
+            return time.time()
+
+    def write(self, nid, text):
+        p = self.path(nid)
+        tmp = p + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, p)
+
+    def new_id(self):
+        return time.strftime("%Y%m%d-%H%M%S") + f"-{int(time.time() * 1000) % 1000:03d}"
+
+    def trash(self, nid):
+        try:
+            os.replace(self.path(nid), os.path.join(DATA, "trash", nid + ".md"))
+        except OSError:
+            pass
+
+    def load_state(self):
+        try:
+            with open(self.state_path) as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
+
+    def save_state(self, st):
+        try:
+            with open(self.state_path, "w") as f:
+                json.dump(st, f)
+        except OSError:
+            pass
+
+
+class Notes(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.store = Store()
+        self.state = self.store.load_state()
+        self.cur = None            # id of the open note
+        self.loading = False
+        self.confirm_delete = False
+
+        self.setWindowTitle("Frost Notes")
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        w, h = self.state.get("size", [820, 540])
+        self.resize(max(560, w), max(360, h))
+        self.setMinimumSize(560, 360)
+        self.setStyleSheet(STYLE)
+
+        # ---- sidebar
+        side = QVBoxLayout()
+        side.setSpacing(8)
+        top = QHBoxLayout()
+        self.search = QLineEdit(placeholderText="Search")
+        self.search.textChanged.connect(self.refresh_list)
+        self.add = QPushButton("+")
+        self.add.setObjectName("add")
+        self.add.setToolTip("New note (Ctrl+N)")
+        self.add.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.add.clicked.connect(self.new_note)
+        top.addWidget(self.search, 1)
+        top.addWidget(self.add)
+        self.list = QListWidget()
+        self.list.setVerticalScrollMode(QListWidget.ScrollMode.ScrollPerPixel)
+        self.list.setItemDelegate(Row(self.list))
+        self.list.setMouseTracking(True)
+        self.list.currentItemChanged.connect(self.on_pick)
+        side.addLayout(top)
+        side.addWidget(self.list, 1)
+        self.sidebar = QWidget()
+        self.sidebar.setFixedWidth(230)
+        self.sidebar.setLayout(side)
+        side.setContentsMargins(14, 14, 8, 14)
+
+        # ---- editor
+        self.edit = QPlainTextEdit()
+        self.edit.setPlaceholderText("Start typing. It saves itself.")
+        self.edit.setTabStopDistance(QFontMetrics(self.edit.font()).horizontalAdvance(" ") * 4)
+        self.edit.document().setDocumentMargin(4)
+        self.edit.textChanged.connect(self.on_text)
+        self.status = QLabel("", objectName="muted")
+        self.hint = QLabel("Esc to close", objectName="muted")
+        self.delete = QPushButton("Delete")
+        self.delete.setObjectName("danger")
+        self.delete.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.delete.clicked.connect(self.delete_note)
+        bar = QHBoxLayout()
+        bar.addWidget(self.status)
+        bar.addStretch(1)
+        bar.addWidget(self.hint)
+        bar.addWidget(self.delete)
+        bar.addSpacing(22)                       # room for the resize grip
+        right = QVBoxLayout()
+        right.setContentsMargins(14, 14, 14, 12)
+        right.addWidget(self.edit, 1)
+        right.addLayout(bar)
+        self.grip = QSizeGrip(self)
+
+        root = QHBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        root.addWidget(self.sidebar)
+        root.addLayout(right, 1)
+
+        # ---- autosave
+        self.timer = QTimer(self, singleShot=True, interval=400)
+        self.timer.timeout.connect(self.flush)
+        self.dirty = False
+
+        for key, fn in (("Esc", self.hide), ("Ctrl+N", self.new_note), ("Ctrl+F", self.search.setFocus),
+                        ("Ctrl+Up", lambda: self.step(-1)), ("Ctrl+Down", lambda: self.step(1))):
+            QShortcut(QKeySequence(key), self, activated=fn)
+
+        self.refresh_list()
+        want = self.state.get("current")
+        if want not in self.store.ids():
+            want = None
+        if want:
+            self.open(want)
+        elif self.store.ids():
+            self.open(self.store.ids()[0])
+        else:
+            self.new_note()
+
+    # ---- drawing: a glass slab; KWin's Better Blur frosts what is behind it
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        path = QPainterPath()
+        path.addRoundedRect(r, 18, 18)
+        p.fillPath(path, QColor(18, 18, 22, 185))
+        side = QPainterPath()
+        side.addRoundedRect(r, 18, 18)
+        clip = QPainterPath()
+        clip.addRect(QRectF(0, 0, 230, self.height()))
+        p.fillPath(side.intersected(clip), QColor(255, 255, 255, 10))
+        p.setPen(QPen(QColor(255, 255, 255, 30), 1))
+        p.drawPath(path)
+        p.setPen(QPen(QColor(255, 255, 255, 20), 1))
+        p.drawLine(QPointF(230, 16), QPointF(230, self.height() - 16))
+
+    def resizeEvent(self, e):
+        self.grip.move(self.width() - self.grip.width() - 4, self.height() - self.grip.height() - 4)
+        super().resizeEvent(e)
+
+    def mousePressEvent(self, e):
+        # drag the window by any empty part of it (Wayland: the compositor moves it)
+        if e.button() == Qt.MouseButton.LeftButton:
+            wh = self.windowHandle()
+            if wh:
+                wh.startSystemMove()
+        super().mousePressEvent(e)
+
+    # ---- notes
+    def refresh_list(self):
+        q = self.search.text().strip().lower()
+        cur = self.cur
+        self.list.blockSignals(True)
+        self.list.clear()
+        for nid in self.store.ids():
+            text = self.store.read(nid) if nid != self.cur else self.edit.toPlainText()
+            if q and q not in text.lower():
+                continue
+            it = QListWidgetItem(f"{title_of(text)}\n{ago(self.store.mtime(nid))}")
+            it.setData(Qt.ItemDataRole.UserRole, nid)
+            it.setSizeHint(QSize(0, 52))
+            self.list.addItem(it)
+            if nid == cur:
+                self.list.setCurrentItem(it)
+        self.list.blockSignals(False)
+
+    def on_pick(self, item, _prev):
+        if item:
+            self.open(item.data(Qt.ItemDataRole.UserRole))
+
+    def open(self, nid):
+        if nid == self.cur:
+            return
+        self.leave()
+        self.cur = nid
+        self.loading = True
+        self.edit.setPlainText(self.store.read(nid))
+        self.edit.moveCursor(QTextCursor.MoveOperation.End)
+        self.loading = False
+        self.dirty = False
+        self.set_status("")
+        self.reset_delete()
+        self.refresh_list()
+        self.state["current"] = nid
+        self.store.save_state(self.state)
+
+    def leave(self):
+        """Save the open note; an empty one is thrown away."""
+        self.timer.stop()
+        if self.cur is None:
+            return
+        text = self.edit.toPlainText()
+        if not text.strip():
+            try:
+                os.remove(self.store.path(self.cur))
+            except OSError:
+                pass
+        elif self.dirty:
+            self.store.write(self.cur, text)
+        self.dirty = False
+
+    def new_note(self):
+        if self.cur and not self.edit.toPlainText().strip():
+            self.edit.setFocus()
+            return                                  # already on a blank note
+        self.leave()
+        self.cur = self.store.new_id()
+        self.loading = True
+        self.edit.clear()
+        self.loading = False
+        self.dirty = False
+        self.search.clear()
+        self.refresh_list()
+        self.state["current"] = self.cur
+        self.store.save_state(self.state)
+        self.edit.setFocus()
+
+    def step(self, d):
+        n = self.list.currentRow() + d
+        if 0 <= n < self.list.count():
+            self.list.setCurrentRow(n)
+
+    def delete_note(self):
+        if not self.confirm_delete:
+            self.confirm_delete = True
+            self.delete.setText("Sure?")
+            QTimer.singleShot(2500, self.reset_delete)
+            return
+        gone = self.cur
+        self.cur = None
+        self.store.trash(gone)
+        self.reset_delete()
+        ids = self.store.ids()
+        if ids:
+            self.open(ids[0])
+        else:
+            self.new_note()
+
+    def reset_delete(self):
+        self.confirm_delete = False
+        self.delete.setText("Delete")
+
+    # ---- autosave
+    def on_text(self):
+        if self.loading:
+            return
+        self.dirty = True
+        self.set_status("Saving…")
+        self.timer.start()
+
+    def flush(self):
+        if self.cur is None or not self.dirty:
+            return
+        text = self.edit.toPlainText()
+        if text.strip():
+            self.store.write(self.cur, text)
+            self.dirty = False
+            self.refresh_list()
+            self.set_status(f"Saved · {len(text.split())} words")
+        else:
+            self.dirty = False
+            self.set_status("")
+
+    def set_status(self, s):
+        self.status.setText(s)
+
+    # ---- show / hide
+    def toggle(self):
+        self.hide() if self.isVisible() else self.reveal()
+
+    def reveal(self):
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self.edit.setFocus()
+
+    def hideEvent(self, e):
+        self.leave_save()
+        super().hideEvent(e)
+
+    def leave_save(self):
+        self.timer.stop()
+        if self.dirty and self.cur and self.edit.toPlainText().strip():
+            self.store.write(self.cur, self.edit.toPlainText())
+            self.dirty = False
+        self.state["size"] = [self.width(), self.height()]
+        self.state["current"] = self.cur
+        self.store.save_state(self.state)
+        self.refresh_list()
+
+    def closeEvent(self, e):
+        e.ignore()          # the window only hides; `frost-notes quit` ends the process
+        self.hide()
+
+
+class Server(QObject):
+    def __init__(self, win, app):
+        super().__init__()
+        self.win, self.app = win, app
+        try:
+            os.remove(SOCK)
+        except OSError:
+            pass
+        self.srv = QLocalServer(self)
+        self.srv.newConnection.connect(self.on_conn)
+        if not self.srv.listen(SOCK):
+            sys.exit("frost-notes: cannot listen on " + SOCK)
+
+    def on_conn(self):
+        c = self.srv.nextPendingConnection()
+        c.readyRead.connect(lambda c=c: self.on_cmd(c))
+
+    def on_cmd(self, c):
+        for line in bytes(c.readAll()).decode().split():
+            if line == "toggle":
+                self.win.toggle()
+            elif line == "show":
+                self.win.reveal()
+            elif line == "hide":
+                self.win.hide()
+            elif line == "quit":
+                self.win.leave_save()
+                self.app.quit()
+        c.disconnectFromServer()
+
+
+def main():
+    app = QApplication(sys.argv)
+    app.setApplicationName("frost-notes")
+    app.setDesktopFileName("frost-notes")      # the window's app id: KWin rules and blur match on it
+    app.setQuitOnLastWindowClosed(False)
+    win = Notes()
+    srv = Server(win, app)
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, lambda *_: (win.leave_save(), app.quit()))
+    tick = QTimer()                             # lets Python see signals while Qt runs
+    tick.start(500)
+    tick.timeout.connect(lambda: None)
+    if "daemon" not in sys.argv[1:2]:
+        win.reveal()
+    code = app.exec()
+    try:
+        os.remove(SOCK)
+    except OSError:
+        pass
+    sys.exit(code)
+
+
+if __name__ == "__main__":
+    main()
