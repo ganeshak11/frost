@@ -21,6 +21,10 @@ a set of native Plasma desktop widgets, a Mac-style dock and a Dynamic Island.
 | `extras/system-boot.sh` | **sudo.** Plymouth boot splash and GRUB menu theme (`plymouth/`, `grub/`). `--undo` restores the previous ones |
 | `extras/cursors/` | Frost cursor theme: `build_cursors.py` draws 23 cursors (dark body, white outline, red badges, animated red spinner) as Plasma SVG cursors + Xcursor files with 81 alias names, inheriting Breeze for the rest. `install.sh` installs to `~/.icons/Frost-cursors` and applies it; `--revert` goes back |
 | `extras/icons/` | Frost icon theme: `build_icons.py` makes Frost from Papirus-Dark with ~1,400 folder icons recoloured to the Frost red; everything else is inherited from Papirus. `install.sh` installs it (also run by the main `install.sh`) |
+| `extras/gtk/` | Frost for GTK 3 / GTK 4 apps: `build_gtk.py` recolours Breeze-Dark with the Frost palette and adds glass (translucent windows, header bars, sidebars, menus; rounded). `install.sh` puts it in `~/.themes/Frost`, selects it, adds the colours for libadwaita apps to `~/.config/gtk-4.0/gtk.css` and points Flatpak apps at it; `--revert` goes back |
+| `extras/vscode/` | **Frost Dark** editor theme for VS Code, Cursor and Antigravity (`build_theme.py` makes a `.vsix`). `install.sh` installs it in each editor and selects it; colour overrides you had for every theme are kept, under your previous theme's name. `--revert` switches back |
+| `extras/chromium/` | Frost Dark browser theme for Brave / Chrome. `install.sh` copies it to `~/.local/share/frost/chromium-theme` and prints the three clicks to load it (Chromium only takes local themes through its own page) |
+| `extras/kwin/` | `install.sh`: the Frost Alt+Tab window switcher. `better-blur.sh`: **sudo.** Builds and switches on [Better Blur DX](https://github.com/xarblu/kwin-effects-better-blur-dx), so GTK apps and their menus get real frosted glass; `--rebuild` after a Plasma update, `--off` for KWin's own blur |
 | `previews/` | Screenshots used as the Global Theme previews in System Settings |
 
 ## Dock and Dynamic Island
