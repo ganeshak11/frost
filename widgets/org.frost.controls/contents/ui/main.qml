@@ -1,5 +1,6 @@
 // Quick Command Centre, phone style: three tall rounded sliders (volume,
-// microphone, screen brightness; drag or scroll, tap the icon to mute) and
+// microphone, screen brightness; drag or scroll, tap the icon to mute, tap the
+// number on volume / mic for outputs, inputs and per-app volume) and
 // rounded pills for Wi-Fi, Bluetooth, Tailscale, Do Not Disturb, Night Light
 // and Power. Power opens Plasma's normal shutdown screen, so it always asks.
 // Wi-Fi and Bluetooth: the round icon turns them on / off, the rest of the pill
@@ -30,36 +31,23 @@ PlasmoidItem {
     property string tsState: "…"
     property string tsHint: ""
 
-    // sliders
-    property real vol: 0;   property bool volMuted: false
-    property real mic: 0;   property bool micMuted: false
-    property real light: 0; property int lightMax: 1
-    // While a slider is held, and for a moment after a change from here, the poll
-    // must not snap it back to the old value. `dragging` is cleared on release AND
-    // on cancel (the desktop takes the mouse away on press-and-hold to move the
-    // widget); if it were left set, the sliders would never update again.
-    property bool dragging: false
-    property double lastSet: 0
-    property string listFor: ""      // "wifi" / "bluetooth" while its list covers the card
+    // sliders: live levels (see Levels.qml)
+    Levels { id: lv }
+    property string listFor: ""      // "wifi" / "bluetooth" / "audio" while its list covers the card
+    // Bluetooth pill: the connected device's battery when it reports one
+    property int btTick: 0
+    Connections { target: BluezQt.Manager; function onDeviceChanged() { root.btTick++ } }
+    readonly property string btSub: {
+        btTick
+        if (!btOn) return "Off"
+        const c = BluezQt.Manager.devices.filter(d => d.connected)
+        const b = c.length === 1 && c[0].battery ? c[0].battery.percentage : -1
+        return b >= 0 ? b + "%" : "On"
+    }
 
     readonly property string qd: "qdbus6 org.kde.KWin /org/kde/KWin/NightLight org.freedesktop.DBus.Properties.Get org.kde.KWin.NightLight "
     readonly property string cmdNight: "echo $(" + qd + "enabled) $(" + qd + "inhibited)"
     readonly property string cmdTs: "tailscale status >/dev/null 2>&1 && echo on || echo off"
-    readonly property string bd: "qdbus6 org.kde.ScreenBrightness /org/kde/ScreenBrightness/display0 org.kde.ScreenBrightness.Display."
-    readonly property string cmdLevels: "echo $(wpctl get-volume @DEFAULT_AUDIO_SINK@) '|' $(wpctl get-volume @DEFAULT_AUDIO_SOURCE@) '|' $(" + bd + "Brightness) $(" + bd + "MaxBrightness)"
-
-    function setLevel(kind, v) {
-        v = Math.max(0, Math.min(1, v))
-        lastSet = Date.now()
-        if (kind === "vol") { vol = v; exec.run("wpctl set-volume @DEFAULT_AUDIO_SINK@ " + v.toFixed(2)) }
-        else if (kind === "mic") { mic = v; exec.run("wpctl set-volume @DEFAULT_AUDIO_SOURCE@ " + v.toFixed(2)) }
-        else { light = v; exec.run(bd + "SetBrightness " + Math.max(1, Math.round(v * lightMax)) + " 0") }
-    }
-    function toggleMute(kind) {
-        lastSet = Date.now()
-        if (kind === "vol") { volMuted = !volMuted; exec.run("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle") }
-        else if (kind === "mic") { micMuted = !micMuted; exec.run("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle") }
-    }
 
     P5Support.DataSource {
         id: exec
@@ -68,15 +56,6 @@ PlasmoidItem {
             const out = (data["stdout"] || "").trim(), err = (data["stderr"] || "").trim()
             if (src === root.cmdNight) {
                 const p = out.split(/\s+/); root.nightOn = p[0] === "true" && p[1] !== "true"
-            } else if (src === root.cmdLevels) {
-                if (!root.dragging && Date.now() - root.lastSet > 1200) {
-                    const parts = out.split("|").map(x => x.trim())
-                    const num = (t) => parseFloat(((t || "").match(/Volume:\s*([\d.]+)/) || [0, 0])[1])
-                    root.vol = Math.min(1, num(parts[0])); root.volMuted = /MUTED/.test(parts[0])
-                    root.mic = Math.min(1, num(parts[1])); root.micMuted = /MUTED/.test(parts[1])
-                    const b = (parts[2] || "").split(/\s+/).map(Number)
-                    if (b[1] > 0) { root.lightMax = b[1]; root.light = b[0] / b[1] }
-                }
             } else if (src === root.cmdTs) {
                 root.tsState = out
             } else if (src.startsWith("tailscale up") || src.startsWith("tailscale down")) {
@@ -91,11 +70,9 @@ PlasmoidItem {
     }
     Timer { interval: 8000; running: true; repeat: true; triggeredOnStart: true
             onTriggered: { exec.run(root.cmdNight); exec.run(root.cmdTs) } }
-    // levels follow changes made elsewhere (keys, earbud buttons, another app, a new default device)
-    Timer { interval: 1500; running: true; repeat: true; triggeredOnStart: true; onTriggered: exec.run(root.cmdLevels) }
     Timer { id: nightCheck; interval: 600; onTriggered: exec.run(root.cmdNight) }
 
-    // for testing on its own: `plasmawindowed org.frost.controls frost-test:wifi|bluetooth [frost-shot:/path.png]`
+    // for testing on its own: `plasmawindowed org.frost.controls frost-test:wifi|bluetooth|audio [frost-shot:/path.png]`
     Timer {
         interval: 1500; running: Qt.application.name === "plasmawindowed"
         onTriggered: {
@@ -136,7 +113,7 @@ PlasmoidItem {
                 height: Math.max(sl.width, parent.height * sl.value)
                 radius: sl.radius
                 color: sl.muted ? st.subtle : st.fill
-                Behavior on height { enabled: !root.dragging; NumberAnimation { duration: 180 } }
+                Behavior on height { enabled: !lv.dragging; NumberAnimation { duration: 180 } }
             }
             Text {
                 anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 10 }
@@ -150,13 +127,20 @@ PlasmoidItem {
                 preventStealing: true
                 property real lastSent: 0
                 function at(y) { return 1 - y / height }
-                onPressed: (e) => { root.dragging = true; root.setLevel(sl.kind, at(e.y)) }
+                onPressed: (e) => { lv.dragging = true; lv.setLevel(sl.kind, at(e.y)) }
                 onPositionChanged: (e) => {
-                    if (Date.now() - lastSent > 80) { lastSent = Date.now(); root.setLevel(sl.kind, at(e.y)) }
+                    if (Date.now() - lastSent > 80) { lastSent = Date.now(); lv.setLevel(sl.kind, at(e.y)) }
                 }
-                onReleased: (e) => { root.setLevel(sl.kind, at(e.y)); root.dragging = false }
-                onCanceled: root.dragging = false
-                onWheel: (w) => root.setLevel(sl.kind, sl.value + (w.angleDelta.y > 0 ? 0.05 : -0.05))
+                onReleased: (e) => { lv.setLevel(sl.kind, at(e.y)); lv.dragging = false }
+                onCanceled: lv.dragging = false
+                onWheel: (w) => lv.setLevel(sl.kind, sl.value + (w.angleDelta.y > 0 ? 0.05 : -0.05))
+            }
+            MouseArea {   // the number on volume / mic: outputs, inputs and apps
+                anchors { top: parent.top; left: parent.left; right: parent.right }
+                height: 32
+                visible: sl.kind !== "light"
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.listFor = "audio"
             }
             Kirigami.Icon {   // tap to mute
                 anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: 13 }
@@ -167,7 +151,7 @@ PlasmoidItem {
                     anchors.fill: parent; anchors.margins: -6
                     cursorShape: Qt.PointingHandCursor
                     enabled: sl.kind !== "light"
-                    onClicked: root.toggleMute(sl.kind)
+                    onClicked: lv.toggleMute(sl.kind)
                 }
             }
         }
@@ -216,11 +200,11 @@ PlasmoidItem {
                 Layout.fillWidth: card.compact
                 Layout.preferredHeight: card.compact ? 172 : -1
                 spacing: 8
-                VSlider { Layout.preferredWidth: 44; Layout.fillWidth: card.compact; Layout.fillHeight: true; kind: "vol"; value: root.vol; muted: root.volMuted
+                VSlider { Layout.preferredWidth: 44; Layout.fillWidth: card.compact; Layout.fillHeight: true; kind: "vol"; value: lv.vol; muted: lv.volMuted
                           icon: "audio-volume-high"; mutedIcon: "audio-volume-muted" }
-                VSlider { Layout.preferredWidth: 44; Layout.fillWidth: card.compact; Layout.fillHeight: true; kind: "mic"; value: root.mic; muted: root.micMuted
+                VSlider { Layout.preferredWidth: 44; Layout.fillWidth: card.compact; Layout.fillHeight: true; kind: "mic"; value: lv.mic; muted: lv.micMuted
                           icon: "audio-input-microphone"; mutedIcon: "microphone-sensitivity-muted" }
-                VSlider { Layout.preferredWidth: 44; Layout.fillWidth: card.compact; Layout.fillHeight: true; kind: "light"; value: root.light; icon: "brightness-high" }
+                VSlider { Layout.preferredWidth: 44; Layout.fillWidth: card.compact; Layout.fillHeight: true; kind: "light"; value: lv.light; icon: "brightness-high" }
             }
 
             GridLayout {
@@ -237,7 +221,7 @@ PlasmoidItem {
                 Pill {
                     Layout.fillWidth: true; Layout.fillHeight: true
                     icon: root.btOn ? "network-bluetooth" : "network-bluetooth-inactive"
-                    label: "Bluetooth"; shortLabel: "BT"; sub: root.btOn ? "On" : "Off"; on: root.btOn
+                    label: "Bluetooth"; shortLabel: "BT"; sub: root.btSub; on: root.btOn
                     onHit: BluezQt.Manager.bluetoothBlocked = !BluezQt.Manager.bluetoothBlocked
                     hasList: true; onMore: root.listFor = "bluetooth"
                 }
@@ -290,17 +274,20 @@ PlasmoidItem {
                         Kirigami.Icon { anchors.centerIn: parent; width: 16; height: 16; isMask: true; color: st.text; source: "go-previous" }
                         MouseArea { id: backM; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.listFor = "" }
                     }
-                    Text { text: root.listFor === "wifi" ? "Wi-Fi" : "Bluetooth"; color: st.text; font.pixelSize: 15; font.weight: Font.DemiBold
+                    Text { text: ({ wifi: "Wi-Fi", bluetooth: "Bluetooth", audio: "Sound" })[root.listFor] || ""
+                           color: st.text; font.pixelSize: 15; font.weight: Font.DemiBold
                            Layout.fillWidth: true }
                 }
                 WifiList { visible: root.listFor === "wifi"; Layout.fillWidth: true; maxRows: 6 }
                 BluetoothList { visible: root.listFor === "bluetooth"; Layout.fillWidth: true; maxRows: 6 }
-                Item { Layout.fillHeight: true }
+                AudioList { visible: root.listFor === "audio"; Layout.fillWidth: true; Layout.fillHeight: true; levels: lv }
+                Item { Layout.fillHeight: root.listFor !== "audio" }
                 Text {
-                    text: root.listFor === "wifi" ? "Network Settings…" : "Bluetooth Settings…"
+                    readonly property var kcm: ({ wifi: "kcm_networkmanagement", bluetooth: "kcm_bluetooth", audio: "kcm_pulseaudio" })
+                    text: ({ wifi: "Network Settings…", bluetooth: "Bluetooth Settings…", audio: "Sound Settings…" })[root.listFor] || ""
                     color: setM.containsMouse ? st.accent : st.muted; font.pixelSize: 12
                     MouseArea { id: setM; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                onClicked: exec.run(root.listFor === "wifi" ? "systemsettings kcm_networkmanagement" : "systemsettings kcm_bluetooth") }
+                                onClicked: exec.run("systemsettings " + parent.kcm[root.listFor]) }
                 }
             }
         }

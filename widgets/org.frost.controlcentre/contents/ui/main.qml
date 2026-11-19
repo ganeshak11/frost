@@ -3,7 +3,8 @@
 //   Wi-Fi, Bluetooth   click the switch to turn on / off, click the name for the
 //                      list of networks / paired devices (click one to connect)
 //   tiles              Do Not Disturb, Night Light, Tailscale
-//   sliders            display brightness, volume (click the icon to mute)
+//   sliders            display brightness, volume, microphone (click the icon to mute);
+//                      click "Sound" for outputs, inputs and per-app volume
 //   now playing        any MPRIS player
 // Esc or a click elsewhere closes it. The widget itself is a 1 px item in the top panel.
 import QtQuick
@@ -39,7 +40,7 @@ PlasmoidItem {
     }
     Connections { target: Plasmoid; function onActivated() { root.toggle() } }
     onExpandedChanged: (on) => { if (on) { root.toggle(); Qt.callLater(() => root.expanded = false) } }
-    property string page: "main"        // main, wifi, bluetooth
+    property string page: "main"        // main, wifi, bluetooth, audio
     function open() {
         page = "main"
         refresh()
@@ -69,7 +70,9 @@ PlasmoidItem {
         btTick
         if (!btOn) return "Off"
         const c = BluezQt.Manager.devices.filter(d => d.connected)
-        return c.length === 0 ? "On" : c.length === 1 ? c[0].name : c.length + " devices"
+        if (c.length !== 1) return c.length === 0 ? "On" : c.length + " devices"
+        const b = c[0].battery ? c[0].battery.percentage : -1
+        return c[0].name + (b >= 0 ? "  ·  " + b + "%" : "")
     }
     property string ssid: ""
     readonly property string wifiWhat: !nm.wirelessEnabled ? "Off" : ssid || "Not connected"
@@ -77,22 +80,13 @@ PlasmoidItem {
                                   && !isNaN(notif.notificationsInhibitedUntil) && notif.notificationsInhibitedUntil > new Date()
     property bool nightOn: false
     property string tsState: "…"
-    property real vol: 0;   property bool volMuted: false
-    property real light: 0; property int lightMax: 1
-    property bool dragging: false
+    Levels { id: lv; active: win.visible }   // live volume, mic, brightness (see Levels.qml)
 
     readonly property string qd: "qdbus6 org.kde.KWin /org/kde/KWin/NightLight org.freedesktop.DBus.Properties.Get org.kde.KWin.NightLight "
     readonly property string cmdSsid: "nmcli -t -f TYPE,NAME connection show --active | sed -n 's/^802-11-wireless://p' | head -1"
     readonly property string cmdNight: "echo $(" + qd + "enabled) $(" + qd + "inhibited)"
     readonly property string cmdTs: "command -v tailscale >/dev/null || { echo none; exit; }; tailscale status >/dev/null 2>&1 && echo on || echo off"
-    readonly property string bd: "qdbus6 org.kde.ScreenBrightness /org/kde/ScreenBrightness/display0 org.kde.ScreenBrightness.Display."
-    readonly property string cmdLevels: "echo $(wpctl get-volume @DEFAULT_AUDIO_SINK@) '|' $(" + bd + "Brightness) $(" + bd + "MaxBrightness)"
-    function refresh() { exec.run(cmdNight); exec.run(cmdTs); exec.run(cmdLevels); exec.run(cmdSsid) }
-    function setLevel(kind, v) {
-        v = Math.max(0, Math.min(1, v))
-        if (kind === "vol") { vol = v; exec.run("wpctl set-volume @DEFAULT_AUDIO_SINK@ " + v.toFixed(2)) }
-        else { light = v; exec.run(bd + "SetBrightness " + Math.max(1, Math.round(v * lightMax)) + " 0") }
-    }
+    function refresh() { exec.run(cmdNight); exec.run(cmdTs); exec.run(cmdSsid) }
 
     P5Support.DataSource {
         id: exec
@@ -101,14 +95,6 @@ PlasmoidItem {
             const out = (data["stdout"] || "").trim()
             if (src === root.cmdNight) {
                 const p = out.split(/\s+/); root.nightOn = p[0] === "true" && p[1] !== "true"
-            } else if (src === root.cmdLevels) {
-                if (!root.dragging) {
-                    const parts = out.split("|").map(x => x.trim())
-                    root.vol = Math.min(1, parseFloat(((parts[0] || "").match(/Volume:\s*([\d.]+)/) || [0, 0])[1]))
-                    root.volMuted = /MUTED/.test(parts[0])
-                    const b = (parts[1] || "").split(/\s+/).map(Number)
-                    if (b[1] > 0) { root.lightMax = b[1]; root.light = b[0] / b[1] }
-                }
             } else if (src === root.cmdSsid) {
                 root.ssid = out
             } else if (src === root.cmdTs) {
@@ -122,10 +108,10 @@ PlasmoidItem {
         }
         function run(c) { connectSource(c) }
     }
-    Timer { interval: 3000; running: win.visible; repeat: true; onTriggered: { exec.run(root.cmdLevels); exec.run(root.cmdNight); exec.run(root.cmdSsid) } }
+    Timer { interval: 3000; running: win.visible; repeat: true; onTriggered: { exec.run(root.cmdNight); exec.run(root.cmdSsid) } }
     Timer { id: nightCheck; interval: 600; onTriggered: exec.run(root.cmdNight) }
 
-    // for testing on its own: `plasmawindowed org.frost.controlcentre frost-test:main|wifi|bluetooth [frost-shot:/path.png]`
+    // for testing on its own: `plasmawindowed org.frost.controlcentre frost-test:main|wifi|bluetooth|audio [frost-shot:/path.png]`
     Timer {
         interval: 1500; running: Qt.application.name === "plasmawindowed"
         onTriggered: {
@@ -236,8 +222,19 @@ PlasmoidItem {
         property bool muted: false
         property string icon
         property string mutedIcon: icon
+        property string detail                  // e.g. the output in use; clicking the title then opens the Sound page
         spacing: 6
-        Text { text: hs.title; color: st.text; font.pixelSize: 12; font.weight: Font.DemiBold; Layout.leftMargin: 2 }
+        RowLayout {
+            Layout.leftMargin: 2; spacing: 6
+            Text { text: hs.title; color: st.text; font.pixelSize: 12; font.weight: Font.DemiBold }
+            Text {
+                visible: hs.detail.length > 0
+                text: "·  " + hs.detail + "  ›"; color: dm.containsMouse ? st.accent : st.muted
+                font.pixelSize: 11; elide: Text.ElideRight; Layout.maximumWidth: 260; textFormat: Text.PlainText
+                MouseArea { id: dm; anchors.fill: parent; anchors.margins: -4; hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor; onClicked: root.page = "audio" }
+            }
+        }
         Rectangle {
             id: track
             Layout.fillWidth: true
@@ -251,7 +248,7 @@ PlasmoidItem {
                 width: Math.max(track.height, track.width * hs.value)
                 radius: track.radius
                 color: hs.muted ? st.subtle : st.fill
-                Behavior on width { enabled: !root.dragging; NumberAnimation { duration: 160 } }
+                Behavior on width { enabled: !lv.dragging; NumberAnimation { duration: 160 } }
             }
             MouseArea {
                 anchors.fill: parent
@@ -259,11 +256,11 @@ PlasmoidItem {
                 preventStealing: true
                 property real lastSent: 0
                 function at(x) { return x / width }
-                onCanceled: root.dragging = false     // else the levels would never refresh again
-                onPressed: (e) => { root.dragging = true; root.setLevel(hs.kind, at(e.x)) }
-                onPositionChanged: (e) => { if (Date.now() - lastSent > 80) { lastSent = Date.now(); root.setLevel(hs.kind, at(e.x)) } }
-                onReleased: (e) => { root.setLevel(hs.kind, at(e.x)); root.dragging = false }
-                onWheel: (w) => root.setLevel(hs.kind, hs.value + (w.angleDelta.y > 0 ? 0.05 : -0.05))
+                onCanceled: lv.dragging = false       // else the levels would never refresh again
+                onPressed: (e) => { lv.dragging = true; lv.setLevel(hs.kind, at(e.x)) }
+                onPositionChanged: (e) => { if (Date.now() - lastSent > 80) { lastSent = Date.now(); lv.setLevel(hs.kind, at(e.x)) } }
+                onReleased: (e) => { lv.setLevel(hs.kind, at(e.x)); lv.dragging = false }
+                onWheel: (w) => lv.setLevel(hs.kind, hs.value + (w.angleDelta.y > 0 ? 0.05 : -0.05))
             }
             Kirigami.Icon {
                 anchors { left: parent.left; leftMargin: 7; verticalCenter: parent.verticalCenter }
@@ -272,9 +269,9 @@ PlasmoidItem {
                 color: hs.muted ? st.text : st.textOnFill
                 MouseArea {
                     anchors.fill: parent; anchors.margins: -6
-                    enabled: hs.kind === "vol"
+                    enabled: hs.kind !== "light"
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: { root.volMuted = !root.volMuted; exec.run("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle") }
+                    onClicked: lv.toggleMute(hs.kind)
                 }
             }
             Text {
@@ -382,9 +379,13 @@ PlasmoidItem {
                         id: sliders
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
                         spacing: 12
-                        HSlider { Layout.fillWidth: true; title: "Display"; kind: "light"; value: root.light; icon: "brightness-high" }
-                        HSlider { Layout.fillWidth: true; title: "Sound"; kind: "vol"; value: root.vol; muted: root.volMuted
+                        HSlider { Layout.fillWidth: true; title: "Display"; kind: "light"; value: lv.light; icon: "brightness-high" }
+                        HSlider { Layout.fillWidth: true; title: "Sound"; kind: "vol"; value: lv.vol; muted: lv.volMuted
+                                  detail: lv.output || "Outputs"
                                   icon: "audio-volume-high"; mutedIcon: "audio-volume-muted" }
+                        HSlider { Layout.fillWidth: true; title: "Microphone"; kind: "mic"; value: lv.mic; muted: lv.micMuted
+                                  detail: lv.input || "Inputs"
+                                  icon: "audio-input-microphone"; mutedIcon: "microphone-sensitivity-muted" }
                     }
                 }
 
@@ -398,8 +399,17 @@ PlasmoidItem {
                         Rectangle {
                             Layout.preferredWidth: 48; Layout.preferredHeight: 48
                             radius: 10; color: st.faint; clip: true
-                            Image { anchors.fill: parent; source: root.player ? root.player.artUrl : ""; fillMode: Image.PreserveAspectCrop
-                                    sourceSize: Qt.size(96, 96); asynchronous: true }
+                            Image {   // a failed load is tried again a few times ("#rN" skips Qt's cache)
+                                id: ccArt
+                                readonly property string url: root.player ? (root.player.artUrl || "") : ""
+                                property int tries: 0
+                                onUrlChanged: tries = 0
+                                anchors.fill: parent; fillMode: Image.PreserveAspectCrop
+                                source: url ? url + (tries > 0 ? "#r" + tries : "") : ""
+                                sourceSize: Qt.size(96, 96); asynchronous: true
+                                onStatusChanged: if (status === Image.Error && tries < 4) ccArtRetry.restart()
+                                Timer { id: ccArtRetry; interval: 800; onTriggered: ccArt.tries++ }
+                            }
                         }
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 1
@@ -436,9 +446,11 @@ PlasmoidItem {
                     Layout.fillWidth: true
                     spacing: 8
                     Bubble { implicitWidth: 30; implicitHeight: 30; icon: "go-previous"; onHit: root.page = "main" }
-                    Text { text: root.page === "wifi" ? "Wi-Fi" : "Bluetooth"; color: st.text; font.pixelSize: 15; font.weight: Font.DemiBold
+                    Text { text: ({ wifi: "Wi-Fi", bluetooth: "Bluetooth", audio: "Sound" })[root.page] || ""
+                           color: st.text; font.pixelSize: 15; font.weight: Font.DemiBold
                            Layout.fillWidth: true }
                     Bubble {   // on / off
+                        visible: root.page !== "audio"
                         readonly property bool isOn: root.page === "wifi" ? nm.wirelessEnabled : root.btOn
                         icon: root.page === "wifi" ? "network-wireless" : "network-bluetooth"
                         on: isOn
@@ -449,13 +461,15 @@ PlasmoidItem {
                 Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: st.faint }
                 WifiList { visible: root.page === "wifi"; Layout.fillWidth: true; maxRows: 8 }
                 BluetoothList { visible: root.page === "bluetooth"; Layout.fillWidth: true; maxRows: 8 }
+                AudioList { visible: root.page === "audio"; Layout.fillWidth: true; levels: lv; maxHeight: 420 }
                 Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: st.faint }
                 Text {
                     Layout.leftMargin: 6; Layout.bottomMargin: 2
-                    text: root.page === "wifi" ? "Network Settings…" : "Bluetooth Settings…"
+                    readonly property var kcm: ({ wifi: "kcm_networkmanagement", bluetooth: "kcm_bluetooth", audio: "kcm_pulseaudio" })
+                    text: ({ wifi: "Network Settings…", bluetooth: "Bluetooth Settings…", audio: "Sound Settings…" })[root.page] || ""
                     color: lm.containsMouse ? st.accent : st.muted; font.pixelSize: 12
                     MouseArea { id: lm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                onClicked: { exec.run(root.page === "wifi" ? "systemsettings kcm_networkmanagement" : "systemsettings kcm_bluetooth"); root.close() } }
+                                onClicked: { exec.run("systemsettings " + parent.kcm[root.page]); root.close() } }
                 }
             }
         }

@@ -8,6 +8,7 @@ for w in "$HERE"/org.frost.*; do
   id=$(basename "$w")
   cp -r "$w" "$OUT/$id"
   cp "$HERE"/shared/*.qml "$OUT/$id/contents/ui/"
+  mkdir -p "$OUT/$id/contents/code"; cp "$HERE"/shared/code/*.py "$OUT/$id/contents/code/"   # helpers (levels.py)
   # every widget gets a General/hidden flag, used by the layout profiles
   python3 - "$OUT/$id/contents/config/main.xml" <<'PY'
 import os, sys

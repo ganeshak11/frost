@@ -403,9 +403,40 @@ PlasmoidItem {
         property int r: size / 2
         width: size; height: size
         Rectangle { id: m; anchors.fill: parent; radius: parent.r; visible: false; layer.enabled: true }
-        Image { id: img; anchors.fill: parent; visible: false; source: root.player ? root.player.artUrl : ""; fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(200, 200); asynchronous: true }
+        Image {   // a failed load is tried again a few times ("#rN" skips Qt's cache)
+            id: img; anchors.fill: parent; visible: false; fillMode: Image.PreserveAspectCrop; sourceSize: Qt.size(200, 200); asynchronous: true
+            readonly property string url: root.player ? (root.player.artUrl || "") : ""
+            property int tries: 0
+            onUrlChanged: tries = 0
+            source: url ? url + (tries > 0 ? "#r" + tries : "") : ""
+            onStatusChanged: if (status === Image.Error && tries < 4) artRetry.restart()
+            Timer { id: artRetry; interval: 800; onTriggered: img.tries++ }
+        }
         MultiEffect { anchors.fill: parent; source: img; maskEnabled: true; maskSource: m; visible: img.status === Image.Ready }
         Kirigami.Icon { anchors.fill: parent; visible: img.status !== Image.Ready; source: root.player ? (root.player.iconName || "media-default-album") : "media-default-album" }
+    }
+    // while music leads, the island takes on the colours of the album art: the
+    // artwork, heavily blurred, glowing faintly through the black glass
+    component ArtGlow: Item {
+        id: ag
+        property real r: height / 2
+        property real strength: 0.35
+        property bool show: true
+        anchors.fill: parent
+        visible: show && root.primary === "music" && root.musicActive && glowImg.status === Image.Ready
+        Image { id: glowImg; visible: false; anchors.fill: parent; fillMode: Image.PreserveAspectCrop
+                source: root.player ? (root.player.artUrl || "") : ""; sourceSize: Qt.size(64, 64); asynchronous: true }
+        Rectangle { id: glowMask; anchors.fill: parent; radius: ag.r; visible: false; layer.enabled: true }
+        MultiEffect {
+            anchors.fill: parent
+            source: glowImg
+            autoPaddingEnabled: false
+            blurEnabled: true; blur: 1.0; blurMax: 48
+            saturation: 0.35
+            opacity: ag.strength
+            maskEnabled: true; maskSource: glowMask
+            Behavior on opacity { NumberAnimation { duration: 400 } }
+        }
     }
     component Ring: Item {
         property real progress: 0
@@ -532,6 +563,7 @@ PlasmoidItem {
             scale: pillMouse.containsMouse && !pop.visible ? 1.05 : 1
             Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
             Behavior on width { SpringAnimation { spring: 4; damping: 0.32 } }
+            ArtGlow { r: pill.radius; strength: 0.28 }
             CompactContent { anchors.fill: parent }
             MouseArea {
                 id: pillMouse
@@ -607,6 +639,8 @@ PlasmoidItem {
                 clip: true
                 Behavior on width { id: sw; SpringAnimation { spring: 3.2; damping: 0.28; epsilon: 0.5 } }
                 Behavior on height { id: sh; SpringAnimation { spring: 3.2; damping: 0.28; epsilon: 0.5 } }
+                ArtGlow { r: blob.radius; strength: root.mode === "expanded" ? 0.4 : 0.28
+                          show: root.mode === "expanded" || root.mode === "compact" }   // not behind banners / OSDs
 
                 HoverHandler { id: popArea }
                 TapHandler {

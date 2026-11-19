@@ -192,19 +192,38 @@ PlasmoidItem {
                     }
                 }
 
-                // progress
+                // progress: click or drag to seek (the time follows while dragging)
                 RowLayout {
                     Layout.fillWidth: true; spacing: 8
-                    Text { text: root.clock(root.player ? root.player.position : 0); color: st.muted; font.family: st.mono; font.pixelSize: 10 }
+                    Text { text: root.clock(seek.dragRatio >= 0 ? seek.dragRatio * root.player.length : root.player ? root.player.position : 0)
+                           color: seek.dragRatio >= 0 ? st.text : st.muted; font.family: st.mono; font.pixelSize: 10 }
                     Rectangle {
-                        Layout.fillWidth: true; height: 4; radius: 2; color: st.hover
+                        id: seek
+                        Layout.fillWidth: true; height: seekMa.containsMouse || seekMa.pressed ? 6 : 4; radius: height / 2; color: st.hover
+                        Behavior on height { NumberAnimation { duration: 120 } }
                         readonly property real ratio: root.player && root.player.length > 0 ? root.player.position / root.player.length : 0
-                        Rectangle { width: parent.width * Math.min(1, parent.ratio); height: parent.height; radius: 2; color: st.accent }
+                        property real dragRatio: -1           // while dragging, and until the player catches up
+                        readonly property real shown: Math.min(1, dragRatio >= 0 ? dragRatio : ratio)
+                        Rectangle { width: parent.width * seek.shown; height: parent.height; radius: parent.radius; color: st.accent }
+                        Rectangle {   // knob
+                            visible: seekMa.enabled && (seekMa.containsMouse || seekMa.pressed)
+                            width: 12; height: 12; radius: 6; color: st.text
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: parent.width * seek.shown - width / 2
+                        }
+                        Timer { id: seekSettle; interval: 1200; onTriggered: seek.dragRatio = -1 }
                         MouseArea {
-                            anchors { fill: parent; topMargin: -6; bottomMargin: -6 }
-                            enabled: !!root.player && root.player.canSeek
+                            id: seekMa
+                            anchors { fill: parent; topMargin: -8; bottomMargin: -8 }
+                            enabled: !!root.player && root.player.canSeek && root.player.length > 0
+                            hoverEnabled: true
+                            preventStealing: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: (e) => root.player.position = e.x / width * root.player.length
+                            function at(x) { return Math.max(0, Math.min(1, x / width)) }
+                            onPressed: (e) => { seekSettle.stop(); seek.dragRatio = at(e.x) }
+                            onPositionChanged: (e) => { if (pressed) seek.dragRatio = at(e.x) }
+                            onReleased: (e) => { seek.dragRatio = at(e.x); root.player.position = seek.dragRatio * root.player.length; seekSettle.restart() }
+                            onCanceled: seek.dragRatio = -1
                         }
                     }
                     Text { text: root.clock(root.player ? root.player.length : 0); color: st.muted; font.family: st.mono; font.pixelSize: 10 }
