@@ -4,6 +4,18 @@
 
 - **Screen Time** card and its tracker (`extras/screentime`): time per app and per hour today, top
   apps and the last seven days. Window titles are never recorded.
+- **Frost Link** (`extras/link`): this laptop and [Frost Mobile](https://github.com/ganeshak11/frost-mobile),
+  the Frost launcher for Android, work as one machine over Tailscale. Only your own Tailscale devices
+  are answered. It syncs Frost Notes both ways, screen time, calendars, and each device's battery and
+  music.
+- Screen Time shows the phone and the laptop together (phone in red, laptop in white).
+- Device Ecosystem shows what the phone is playing and its screen time today, and its battery
+  through Frost Link when KDE Connect isn't connected.
+- Calendar & Agenda shows the phone's events, and its own events reach the phone.
+- Frost Notes reloads a note changed on disk (by the sync), unless you are editing it.
+- Desktop layout: the right side is one column (Observatory; Agenda beside Quick Controls; Screen
+  Time), keeping the middle of the wallpaper clear. `desktop.sh` runs again (a quote in a comment
+  had broken it) and finds the desktop even while Plasma reports it on screen -1.
 
 ## v1.0.0 (2026-11-19)
 
