@@ -125,7 +125,7 @@ PlasmoidItem {
     fullRepresentation: GlassCard {
         id: card
         Layout.minimumWidth: 240; Layout.minimumHeight: 240
-        Layout.preferredWidth: 288; Layout.preferredHeight: 288
+        Layout.preferredWidth: 256; Layout.preferredHeight: 288
         Style { id: st }
 
         // the grid: 4 x 4 square units

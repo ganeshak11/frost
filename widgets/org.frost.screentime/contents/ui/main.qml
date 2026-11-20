@@ -54,7 +54,7 @@ PlasmoidItem {
 
     fullRepresentation: GlassCard {
         Layout.minimumWidth: 300; Layout.preferredWidth: 320
-        Layout.minimumHeight: 400; Layout.preferredHeight: 420
+        Layout.minimumHeight: 380; Layout.preferredHeight: 400
         Style { id: st }
 
         MouseArea { anchors.fill: parent; onClicked: root.refresh() }

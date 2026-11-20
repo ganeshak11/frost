@@ -328,8 +328,8 @@ PlasmoidItem {
     Timer { interval: 30000; running: true; repeat: true; onTriggered: root.checkReminders() }   // first check 30 s after start
 
     fullRepresentation: GlassCard {
-        Layout.minimumWidth: 360; Layout.preferredWidth: 400
-        Layout.minimumHeight: 288; Layout.preferredHeight: 320
+        Layout.minimumWidth: 360; Layout.preferredWidth: 360
+        Layout.minimumHeight: 288; Layout.preferredHeight: 288
         Style { id: st }
 
         ColumnLayout {
