@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="url" type="String"><default>https://analytics.ganeshangadi.online</default></entry>
+    <entry name="token" type="String"><default></default></entry>
+  </group>
+</kcfg>

@@ -1,0 +1,14 @@
+{
+  "KPlugin": {
+    "Id": "org.frost.observe",
+    "Name": "Fortis Observe",
+    "Description": "Today's portfolio traffic from Fortis Observe on Obsidian glass: people, visits, a 24-hour strip and the latest page views",
+    "Icon": "office-chart-line",
+    "Category": "System Information",
+    "Authors": [{ "Name": "ganeshak11" }],
+    "License": "GPL-2.0+",
+    "Version": "1.0"
+  },
+  "KPackageStructure": "Plasma/Applet",
+  "X-Plasma-API-Minimum-Version": "6.0"
+}
