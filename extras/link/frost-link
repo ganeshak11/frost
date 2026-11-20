@@ -17,6 +17,9 @@ What travels over it:
                the phone reads this laptop's days back. Only app names and seconds, never titles.
   status       the phone's battery and music land in ~/.local/share/frost/link/phone.json;
                the phone reads this laptop's battery and music, and can play/pause/skip it.
+  calendar     the phone's upcoming events land in ~/.local/share/frost/link/phone-calendar.json
+               (the Agenda card shows them); the Agenda card writes its own events and feeds
+               to laptop-calendar.json, which the phone puts in a local "Laptop" calendar.
 The phone always calls the laptop (Android can't keep a server running), every few
 minutes and whenever Frost opens. If the laptop is off, the phone catches up later.
 """
@@ -189,6 +192,9 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/phone":
             f = LINK / "phone.json"
             return self.reply(200, f.read_bytes() if f.exists() else b"{}")
+        if p in ("/calendar/phone", "/calendar/laptop"):
+            f = LINK / ("phone-calendar.json" if p.endswith("phone") else "laptop-calendar.json")
+            return self.reply(200, f.read_bytes() if f.exists() else b"{}")
         if p == "/notes":
             return self.reply(200, note_index())
         if p.startswith("/notes/"):
@@ -246,6 +252,13 @@ class Handler(BaseHTTPRequestHandler):
                 st["received"] = int(time.time())
                 write_atomic(LINK / "phone.json", json.dumps(st).encode())
                 return self.reply(200, {"ok": True})
+            if p == "/calendar/phone":
+                cal = json.loads(self.body())
+                if not isinstance(cal.get("events"), list):
+                    raise ValueError("no events")
+                cal["received"] = int(time.time())
+                write_atomic(LINK / "phone-calendar.json", json.dumps(cal, separators=(",", ":")).encode())
+                return self.reply(200, {"ok": True, "events": len(cal["events"])})
             if p == "/screentime/phone":
                 days = json.loads(self.body()).get("days", {})
                 for day, data in days.items():

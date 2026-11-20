@@ -1,3 +1,5 @@
+// Your phone's events show here too, and this card's events reach the phone,
+// through Frost Link (extras/link).
 // Calendar & Agenda: Monday-first month grid (today in red, coloured dots on
 // days with events, holidays in red text) and an agenda below that grows with
 // what's coming up. Click a day to see its events; "+" adds an event to the
@@ -65,6 +67,7 @@ PlasmoidItem {
         const d = dayOf(k)
         return localEvents.filter(e => occursOn(e, d)).map(e => occurrence(e, d))
             .concat(feedEvents.filter(e => e.date === k))
+            .concat(phoneShown.filter(e => e.date === k))
             .sort((a, b) => (a.time || "").localeCompare(b.time || ""))
     }
     function nextOccurrence(e, from) {
@@ -79,6 +82,7 @@ PlasmoidItem {
         const t = key(today)
         return localEvents.map(e => nextOccurrence(e, today)).filter(e => e)
             .concat(feedEvents.filter(e => e.date >= t && !e.holiday))
+            .concat(phoneShown.filter(e => e.date >= t))
             .sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")))
     }
     readonly property var agenda: key(selected) === key(today) ? upcoming : eventsOn(key(selected))
@@ -300,6 +304,55 @@ PlasmoidItem {
     }
 
     // ---- reminders (as notifications, so the Dynamic Island shows them) --------
+    // ---- your phone's calendar, through Frost Link (extras/link) ------------------------
+    // The phone sends its upcoming events; they show here with the phone's calendar
+    // colours. A phone calendar this card already has as a feed (holidays, F1) is left
+    // out, and so is any event already here on the same day with the same title.
+    property var phoneEvents: []        // [{date, time, title, color, calendar}]
+    function fetchPhone() {
+        const xhr = new XMLHttpRequest()
+        xhr.onreadystatechange = () => {
+            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200) return
+            try { root.phoneEvents = JSON.parse(xhr.responseText).events || [] } catch (e) {}
+        }
+        xhr.open("GET", "http://127.0.0.1:47830/calendar/phone"); xhr.send()
+    }
+    Timer { interval: 120000; running: true; repeat: true; triggeredOnStart: true; onTriggered: root.fetchPhone() }
+    function norm(t) { return String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, "") }
+    readonly property var phoneShown: {
+        const feeds = feedList()
+        const hasHolidays = feeds.some(f => /holiday/i.test(f.url))
+        const hasF1 = feeds.some(f => /(^|[^a-z])f1([^a-z]|$)|formula/i.test(f.name + " " + f.url))
+        const here = new Set(feedEvents.map(e => e.date + "|" + norm(e.title)))
+        return phoneEvents.filter(e => !(hasHolidays && /holiday/i.test(e.calendar))
+                                       && !(hasF1 && /formula ?1|(^|[^a-z])f1([^a-z]|$)/i.test(e.calendar))
+                                       && !here.has(e.date + "|" + norm(e.title))
+                                       && !localEvents.some(l => occursOn(l, dayOf(e.date)) && norm(l.title) === norm(e.title)))
+            .map(e => ({ date: e.date, time: e.time || "", title: e.title, holiday: false, phone: true,
+                         color: e.color || "#cfcfd6", source: "Phone · " + e.calendar }))
+    }
+
+    // this card's own events and feeds, for the phone (written where Frost Link serves them)
+    readonly property string exported: {
+        const lo = key(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7))
+        const hi = key(new Date(today.getFullYear() + 1, today.getMonth(), today.getDate()))
+        return JSON.stringify({
+            local: localEvents,
+            feeds: feedEvents.filter(e => e.date >= lo && e.date <= hi)
+                             .map(e => ({ date: e.date, time: e.time || "", title: e.title, holiday: !!e.holiday, source: e.source })),
+            at: Math.floor(Date.now() / 1000)
+        })
+    }
+    onExportedChanged: exportTimer.restart()
+    Timer {
+        id: exportTimer; interval: 3000; running: true
+        onTriggered: {
+            const dir = "$HOME/.local/share/frost/link"
+            exec.connectSource("mkdir -p \"" + dir + "\" && printf %s " + root.q(root.exported) + " > \"" + dir + "/laptop-calendar.json.tmp\" && mv \""
+                               + dir + "/laptop-calendar.json.tmp\" \"" + dir + "/laptop-calendar.json\"")
+        }
+    }
+
     P5Support.DataSource { id: exec; engine: "executable"; onNewData: (s) => disconnectSource(s) }
     readonly property var reminded: { try { return JSON.parse(Plasmoid.configuration.reminded) } catch (e) { return [] } }
     function q(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'" }
@@ -314,7 +367,7 @@ PlasmoidItem {
         if (!Plasmoid.configuration.reminders) return
         const now = new Date(), tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
         for (const e of eventsOn(key(now)).concat(eventsOn(key(tomorrow)))) {
-            if (e.holiday) continue
+            if (e.holiday || e.phone) continue
             const id = e.date + "|" + (e.time || "") + "|" + e.title
             if (!e.time) {
                 if (e.date === key(now) && now.getHours() >= 9) remind(id + "|day", e, "Today")
