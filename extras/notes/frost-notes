@@ -52,7 +52,7 @@ import re
 import signal
 import time
 
-from PyQt6.QtCore import QEvent, QObject, QPointF, QRectF, QRegularExpression, QSize, Qt, QTimer, QUrl
+from PyQt6.QtCore import QEvent, QFileSystemWatcher, QObject, QPointF, QRectF, QRegularExpression, QSize, Qt, QTimer, QUrl
 from PyQt6.QtGui import (QAction, QColor, QDesktopServices, QFont, QFontMetrics, QKeySequence, QPainter,
                          QPainterPath, QPalette, QPen, QShortcut, QSyntaxHighlighter, QTextCharFormat,
                          QTextCursor)
@@ -599,6 +599,13 @@ class Notes(QWidget):
         self.timer.timeout.connect(self.flush)
         self.dirty = False
 
+        # notes can change on disk (Frost Link syncs them with the phone): show the new
+        # version, unless you are in the middle of editing that note here
+        self.watcher = QFileSystemWatcher([DATA], self)
+        self.disk_timer = QTimer(self, singleShot=True, interval=300)
+        self.disk_timer.timeout.connect(self.on_disk_change)
+        self.watcher.directoryChanged.connect(lambda _p: self.disk_timer.start())
+
         for key, fn in (("Esc", self.hide), ("Ctrl+N", self.new_note), ("Ctrl+F", self.search.setFocus),
                         ("Ctrl+Up", lambda: self.step(-1)), ("Ctrl+Down", lambda: self.step(1)),
                         ("Ctrl+E", self.toggle_preview)):
@@ -787,6 +794,25 @@ class Notes(QWidget):
         else:
             self.dirty = False
             self.set_status("")
+
+    def on_disk_change(self):
+        if self.cur and not self.dirty:
+            if os.path.exists(self.store.path(self.cur)):
+                disk = self.store.read(self.cur)
+                if disk != self.edit.toPlainText():
+                    pos = self.edit.textCursor().position()
+                    self.loading = True
+                    self.edit.setPlainText(disk)
+                    c = self.edit.textCursor()
+                    c.setPosition(min(pos, len(disk)))
+                    self.edit.setTextCursor(c)
+                    self.loading = False
+            else:                       # deleted on the other device
+                self.loading = True
+                self.edit.setPlainText("")
+                self.loading = False
+                self.cur = None
+        self.refresh_list()
 
     def set_status(self, s):
         self.status.setText(s)

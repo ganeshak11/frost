@@ -33,5 +33,13 @@ try:
                                        "lastSeen": p.get("LastSeen", ""), "ip": (p.get("TailscaleIPs") or [""])[0]}
                                       for p in (t.get("Peer") or {}).values()]}
 except Exception: pass
+# what the phone last told Frost Link (battery, music, screen time), if recent
+try:
+    import os, time
+    f = os.path.expanduser("~/.local/share/frost/link/phone.json")
+    ph = json.load(open(f))
+    ph["fresh"] = time.time() - ph.get("received", 0) < 600
+    out["frost"] = ph
+except Exception: pass
 print(json.dumps(out))
 PY

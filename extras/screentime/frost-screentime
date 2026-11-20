@@ -2,7 +2,8 @@
 """Frost Screen Time: counts how long each app is the active window.
 
     frost-screentime daemon    run the tracker (started at login by the autostart entry)
-    frost-screentime summary   print today's and this week's totals as JSON (used by the card)
+    frost-screentime summary   print today's and this week's totals as JSON (used by the card),
+                               with the phone's numbers too when Frost Link has synced them
     frost-screentime quit      stop a running tracker
 
 A small KWin script (kwin-script.js, loaded by the daemon) reports every window
@@ -225,7 +226,26 @@ def summary():
         dd = data if i == 0 else load_day(d)
         week.append({"day": d.strftime("%a"), "date": d.isoformat(),
                      "secs": round(sum(a.get("secs", 0) for a in dd["apps"].values()))})
+    # the phone's days, sent over by Frost Link (extras/link) into DATA/phone/
+    def load_phone(d):
+        try:
+            pd = json.loads((DATA / "phone" / f"{d.isoformat()}.json").read_text())
+        except (OSError, ValueError):
+            pd = {}
+        pd.setdefault("apps", {})
+        if not isinstance(pd.get("hours"), list) or len(pd["hours"]) != 24:
+            pd["hours"] = [0] * 24
+        return pd
+    ptoday = load_phone(today)
+    papps = sorted(({"id": k, "name": v.get("name", k), "icon": "smartphone", "secs": round(v.get("secs", 0))}
+                    for k, v in ptoday["apps"].items()), key=lambda a: -a["secs"])
+    for w in week:
+        w["phone"] = round(sum(a.get("secs", 0) for a in load_phone(dt.date.fromisoformat(w["date"]))["apps"].values()))
+    phone = {"total": week[-1]["phone"], "yesterday": week[-2]["phone"], "apps": papps[:6],
+             "hours": [round(h) for h in ptoday["hours"]],
+             "synced": (DATA / "phone").is_dir()}
     print(json.dumps({
+        "phone": phone,
         "running": running,
         "total": week[-1]["secs"],
         "yesterday": week[-2]["secs"],

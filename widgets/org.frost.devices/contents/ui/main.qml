@@ -32,6 +32,16 @@ PlasmoidItem {
 
     // the phone to show: the first reachable one, else the first paired one
     readonly property var phone: (st.phones || []).find(p => p.reachable) || (st.phones || [])[0] || null
+    // Frost Link (extras/link): the phone's battery, music and screen time over Tailscale
+    readonly property var fl: st.frost && st.frost.fresh ? st.frost : null
+    readonly property bool kdcOn: !!root.phone && root.phone.reachable
+    readonly property int phonePct: kdcOn ? root.phone.battery : (fl && fl.battery ? fl.battery.pct : -1)
+    readonly property bool phoneCharging: kdcOn ? root.phone.charging : !!(fl && fl.battery && fl.battery.charging)
+    function dur(secs) {
+        secs = Math.round(secs || 0)
+        const h = Math.floor(secs / 3600), m = Math.floor(secs % 3600 / 60)
+        return h ? h + "h " + (m < 10 ? "0" : "") + m + "m" : m + "m"
+    }
     readonly property bool online: !!(st.net && st.net.ip)
     readonly property bool tsOn: st.tailscale.state === "Running"
 
@@ -232,20 +242,40 @@ PlasmoidItem {
                     Head {
                         Layout.fillWidth: true
                         icon: "smartphone-symbolic"
-                        on: !!root.phone && root.phone.reachable
-                        title: root.phone ? root.phone.name : "Phone"
-                        sub: !root.phone ? "Not paired"
-                             : !root.phone.reachable ? "Not connected"
-                             : root.phone.charging ? "Charging" : "Connected"
+                        on: root.kdcOn || !!root.fl
+                        title: root.phone ? root.phone.name : (root.fl ? root.fl.device : "Phone")
+                        sub: root.phoneCharging ? "Charging"
+                             : root.kdcOn ? "Connected"
+                             : root.fl ? "Linked over Tailscale"
+                             : !root.phone ? "Not paired" : "Not connected"
                     }
                     Item { Layout.fillHeight: true }
+                    // what it's playing and today's screen time, from Frost Link
+                    ColumnLayout {
+                        visible: !!root.fl
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Text {
+                            visible: !!(root.fl && root.fl.media && root.fl.media.title)
+                            Layout.fillWidth: true
+                            text: root.fl && root.fl.media ? (root.fl.media.playing ? "♪ " : "❚❚ ") + root.fl.media.title
+                                  + (root.fl.media.artist ? "  ·  " + root.fl.media.artist : "") : ""
+                            color: c.text; font.pixelSize: 11; elide: Text.ElideRight; textFormat: Text.PlainText
+                        }
+                        Text {
+                            visible: !!(root.fl && root.fl.screentime_today !== null && root.fl.screentime_today !== undefined)
+                            text: "Screen time today  " + root.dur(root.fl ? root.fl.screentime_today : 0)
+                            color: c.muted; font.pixelSize: 10; font.family: c.mono
+                        }
+                    }
+                    Item { Layout.preferredHeight: 6 }
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 8
                         // battery capsule
                         Item {
-                            readonly property int pct: root.phone && root.phone.reachable ? root.phone.battery : -1
-                            readonly property bool low: pct >= 0 && pct <= 15 && !root.phone.charging
+                            readonly property int pct: root.phonePct
+                            readonly property bool low: pct >= 0 && pct <= 15 && !root.phoneCharging
                             visible: pct >= 0
                             implicitWidth: 34; implicitHeight: 16
                             Rectangle {
@@ -262,20 +292,20 @@ PlasmoidItem {
                             Rectangle { x: cap.width + 1; y: 5; width: 2.5; height: 6; radius: 1; color: Qt.rgba(1, 1, 1, 0.35) }
                         }
                         Text {
-                            readonly property int pct: root.phone && root.phone.reachable ? root.phone.battery : -1
+                            readonly property int pct: root.phonePct
                             visible: pct >= 0
-                            text: (root.phone && root.phone.charging ? "⚡" : "") + pct + "%"
-                            color: pct >= 0 && pct <= 15 && !root.phone.charging ? c.accent : c.text
+                            text: (root.phoneCharging ? "⚡" : "") + pct + "%"
+                            color: pct >= 0 && pct <= 15 && !root.phoneCharging ? c.accent : c.text
                             font.family: c.mono; font.pixelSize: 12
                         }
                         Text {
-                            visible: !root.phone || !root.phone.reachable
+                            visible: !root.kdcOn && !root.fl
                             text: !root.phone ? "Pair in KDE Connect" : "Open KDE Connect on it"
                             color: c.muted; font.pixelSize: 11
                             elide: Text.ElideRight; Layout.fillWidth: true
                             wrapMode: Text.WordWrap; maximumLineCount: 2
                         }
-                        Item { Layout.fillWidth: true; visible: !!root.phone && root.phone.reachable }
+                        Item { Layout.fillWidth: true; visible: root.kdcOn || !!root.fl }
                         Action {
                             visible: !!root.phone && root.phone.reachable
                             icon: "document-send-symbolic"; tip: "Send a file"

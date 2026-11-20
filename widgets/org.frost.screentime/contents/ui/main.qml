@@ -1,6 +1,8 @@
 // Screen Time: how long you've used each app today, when in the day, and the
-// last seven days. Numbers come from the Frost Screen Time tracker
-// (extras/screentime), read once a minute with `frost-screentime summary`.
+// last seven days, for this laptop and your phone together (phone in Frost red,
+// laptop in white; the same card as on the phone). Numbers come from the Frost
+// Screen Time tracker (extras/screentime), read once a minute with
+// `frost-screentime summary`; the phone's arrive through Frost Link (extras/link).
 import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.plasmoid
@@ -15,7 +17,12 @@ PlasmoidItem {
 
     property var s: null            // the last summary
     property bool installed: true
-    readonly property var apps: s ? s.apps.slice(0, 5) : []
+    readonly property var ph: s && s.phone ? s.phone : ({ total: 0, yesterday: 0, apps: [], hours: [] })
+    readonly property int both: (s ? s.total : 0) + ph.total
+    // top apps of both devices, each marked with where it was used
+    readonly property var apps: s ? s.apps.map(a => Object.assign({ phone: false }, a))
+                                      .concat(ph.apps.map(a => Object.assign({ phone: true }, a)))
+                                      .sort((x, y) => y.secs - x.secs).slice(0, 5) : []
     readonly property var hours: s ? s.hours : []
     readonly property var week: s ? s.week : []
 
@@ -26,8 +33,9 @@ PlasmoidItem {
         return h ? h + "h " + (m < 10 ? "0" : "") + m + "m" : m + "m"
     }
     function delta() {
-        if (!s || !s.yesterday) return ""
-        const d = s.total - s.yesterday
+        const y = s ? s.yesterday + ph.yesterday : 0
+        if (!y) return ""
+        const d = both - y
         if (Math.abs(d) < 60) return "same as yesterday"
         return (d > 0 ? "▲ " : "▼ ") + dur(Math.abs(d)) + " vs yesterday"
     }
@@ -46,7 +54,7 @@ PlasmoidItem {
 
     fullRepresentation: GlassCard {
         Layout.minimumWidth: 300; Layout.preferredWidth: 320
-        Layout.minimumHeight: 380; Layout.preferredHeight: 400
+        Layout.minimumHeight: 400; Layout.preferredHeight: 420
         Style { id: st }
 
         MouseArea { anchors.fill: parent; onClicked: root.refresh() }
@@ -60,15 +68,27 @@ PlasmoidItem {
                 Text { text: "SCREEN TIME"; color: st.muted; font.pixelSize: 11; font.letterSpacing: 2.5 }
                 Item { Layout.fillWidth: true }
                 Text {
-                    text: root.delta(); color: root.s && root.s.total > root.s.yesterday ? st.accent : st.muted
+                    text: root.delta(); color: root.s && root.both > root.s.yesterday + root.ph.yesterday ? st.accent : st.muted
                     font.family: st.mono; font.pixelSize: 10
                 }
             }
 
             RowLayout {
                 spacing: 8
-                Text { text: root.dur(root.s ? root.s.total : 0); color: st.text; font.family: st.mono; font.pixelSize: 34 }
+                Text { text: root.dur(root.both); color: st.text; font.family: st.mono; font.pixelSize: 34 }
                 Text { text: "today"; color: st.muted; font.pixelSize: 12; Layout.alignment: Qt.AlignBaseline }
+            }
+            RowLayout {   // the two devices apart
+                spacing: 16
+                Repeater {
+                    model: [["Phone", st.accent, root.ph.total], ["Laptop", st.fill, root.s ? root.s.total : 0]]
+                    RowLayout {
+                        spacing: 6
+                        Rectangle { width: 8; height: 8; radius: 4; color: modelData[1] }
+                        Text { text: modelData[0]; color: st.muted; font.pixelSize: 11 }
+                        Text { text: root.dur(modelData[2]); color: st.text; font.family: st.mono; font.pixelSize: 11 }
+                    }
+                }
             }
 
             // 24 hours: one bar per hour, the current hour in red
@@ -79,17 +99,29 @@ PlasmoidItem {
                     id: strip
                     Layout.fillWidth: true; Layout.preferredHeight: 40
                     readonly property real cell: (width - 23 * 3) / 24
-                    readonly property real peak: Math.max(900, ...(root.hours.length ? root.hours : [0]))
-                    Repeater {
+                    readonly property real peak: Math.max(900, ...Array.from({ length: 24 }, (_, i) => (root.hours[i] || 0) + (root.ph.hours[i] || 0)))
+                    Repeater {   // each hour: phone (red) under laptop (white); the current hour brighter
                         model: 24
-                        Rectangle {
-                            readonly property real v: root.hours[index] || 0
-                            x: index * (strip.cell + 3); width: strip.cell
-                            height: v > 0 ? Math.max(3, v / strip.peak * strip.height) : 2
-                            anchors.bottom: parent.bottom
-                            radius: Math.min(2, width / 2)
-                            color: root.s && index === root.s.hour ? st.accent : (v > 0 ? st.fill : st.faint)
-                            opacity: root.s && index === root.s.hour ? 1 : (v > 0 ? 0.55 : 1)
+                        Item {
+                            readonly property real p: root.ph.hours[index] || 0
+                            readonly property real l: root.hours[index] || 0
+                            readonly property bool now: root.s && index === root.s.hour
+                            x: index * (strip.cell + 3); width: strip.cell; height: strip.height
+                            Rectangle {
+                                visible: parent.p + parent.l === 0
+                                anchors.bottom: parent.bottom; width: parent.width; height: 2; radius: 1; color: st.faint
+                            }
+                            Rectangle {
+                                id: pBar
+                                anchors.bottom: parent.bottom; width: parent.width; radius: Math.min(2, width / 2)
+                                height: parent.p > 0 ? Math.max(2, parent.p / strip.peak * strip.height) : 0
+                                color: st.accent; opacity: parent.now ? 1 : 0.7
+                            }
+                            Rectangle {
+                                anchors.bottom: pBar.top; width: parent.width; radius: Math.min(2, width / 2)
+                                height: parent.l > 0 ? Math.max(2, parent.l / strip.peak * strip.height) : 0
+                                color: st.fill; opacity: parent.now ? 0.95 : 0.5
+                            }
                         }
                     }
                 }
@@ -123,6 +155,7 @@ PlasmoidItem {
                             RowLayout {
                                 Layout.fillWidth: true
                                 Text { text: modelData.name; color: st.text; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
+                                Text { text: modelData.phone ? "phone" : "laptop"; color: modelData.phone ? st.accent : st.muted; font.pixelSize: 10 }
                                 Text { text: root.dur(modelData.secs); color: st.muted; font.family: st.mono; font.pixelSize: 11 }
                             }
                             Rectangle {
@@ -130,7 +163,7 @@ PlasmoidItem {
                                 Rectangle {
                                     height: parent.height; radius: parent.radius
                                     width: parent.width * (root.apps.length ? modelData.secs / root.apps[0].secs : 0)
-                                    color: index === 0 ? st.accent : st.fill; opacity: index === 0 ? 1 : 0.5
+                                    color: modelData.phone ? st.accent : st.fill; opacity: index === 0 ? 1 : 0.6
                                 }
                             }
                         }
@@ -151,7 +184,7 @@ PlasmoidItem {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 6
-                readonly property real peak: Math.max(3600, ...root.week.map(d => d.secs))
+                readonly property real peak: Math.max(3600, ...root.week.map(d => d.secs + (d.phone || 0)))
                 Repeater {
                     model: root.week
                     ColumnLayout {
@@ -163,12 +196,23 @@ PlasmoidItem {
                         spacing: 3
                         Item {
                             Layout.fillWidth: true; Layout.preferredHeight: 24
-                            Rectangle {
+                            Rectangle {   // nothing that day
+                                visible: day.modelData.secs + (day.modelData.phone || 0) === 0
+                                anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
+                                width: Math.min(parent.width, 18); height: 2; radius: 1; color: st.faint
+                            }
+                            Rectangle {   // phone, red, at the bottom
+                                id: wp
                                 anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
                                 width: Math.min(parent.width, 18); radius: 2
-                                height: day.modelData.secs > 0 ? Math.max(3, day.modelData.secs / day.parent.peak * parent.height) : 2
-                                color: day.isToday ? st.accent : (day.modelData.secs > 0 ? st.fill : st.faint)
-                                opacity: day.isToday ? 1 : (day.modelData.secs > 0 ? 0.45 : 1)
+                                height: (day.modelData.phone || 0) / day.parent.peak * parent.height
+                                color: st.accent; opacity: day.isToday ? 1 : 0.6
+                            }
+                            Rectangle {   // laptop, white, on top
+                                anchors { bottom: wp.top; horizontalCenter: parent.horizontalCenter }
+                                width: Math.min(parent.width, 18); radius: 2
+                                height: day.modelData.secs / day.parent.peak * parent.height
+                                color: st.fill; opacity: day.isToday ? 0.9 : 0.45
                             }
                         }
                         Text {
