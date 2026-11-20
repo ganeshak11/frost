@@ -3,6 +3,12 @@
 A dark-only, glassmorphic look for KDE Plasma 6 (Wayland), plus **Obsidian Glass**:
 a set of native Plasma desktop widgets, a Mac-style dock and a Dynamic Island.
 
+![The Frost desktop: Chronos, Weather, Focus, Device Ecosystem and Music on the left; System Observatory, Agenda, Quick Controls and Screen Time on the right](docs/screenshots/desktop.jpg)
+
+| Dynamic Island | Frost Notes | Spotlight |
+|:---:|:---:|:---:|
+| ![The island opened into the music player](docs/screenshots/island.jpg) | ![Frost Notes over the desktop](docs/screenshots/notes.jpg) | ![Spotlight searching "frost": projects with a preview, then files](docs/screenshots/spotlight.jpg) |
+
 ## Requirements
 
 - KDE Plasma 6 on **Wayland** (built and tested on Plasma 6.6, Ubuntu 26.04, 1920×1080)
