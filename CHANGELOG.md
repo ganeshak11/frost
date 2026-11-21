@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Frost for the terminal** (`extras/terminal`): one palette file (`palette/frost.toml`) and themes
+  generated from it for kitty, Konsole / Yakuake, Zellij, Neovim, Vim, bat and man pages, fzf,
+  `LS_COLORS`, lsd, eza, lazygit, lazydocker, k9s, btop, bottom, yazi, ranger, nnn, fastfetch, glow,
+  less, cava, cmus, newsboat and git. Only installed apps are touched, and `--revert` restores
+  exactly what you had. An optional Frost wallpaper for kitty and Konsole (`--image`).
 - **Screen Time** card and its tracker (`extras/screentime`): time per app and per hour today, top
   apps and the last seven days. Window titles are never recorded.
 - **Frost Link** (`extras/link`): this laptop and [Frost Mobile](https://github.com/ganeshak11/frost-mobile),

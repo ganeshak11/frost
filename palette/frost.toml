@@ -1,0 +1,72 @@
+# The Frost palette: the one place the colours live.
+# Every generator that imports palette/frost_palette.py reads this file, so a
+# change here reaches all of those apps on the next build + install.
+# Dark only.
+
+[base]
+obsidian    = "#0b0b0e"   # terminal background (seen through the glass)
+surface     = "#16161b"   # tabs, inactive bars inside TUIs
+raised      = "#1e1f24"   # status bars, menus, the cursor line
+line        = "#2a2a31"   # borders and dividers
+text        = "#ECECF1"   # normal text
+bright      = "#ffffff"   # text on red, the selected item
+muted       = "#9A9AA6"   # secondary text
+faint       = "#62626e"   # hints, line numbers, comments in UIs
+dim         = "#4a4a55"   # disabled text, empty meters
+
+[accent]
+red         = "#F21D43"   # Frost red: focus, the active thing, directories
+soft        = "#ff5c78"   # lighter red for second-level highlights
+link        = "#ff6b86"   # URLs
+deep        = "#7a1024"   # selection background
+wash        = "#2a1218"   # the selected row in lists (red-tinted, quiet)
+
+[state]
+ok          = "#4ade80"
+warn        = "#fbbf24"
+error       = "#ff5c5c"
+info        = "#60a5fa"
+
+[glass]
+opacity     = 0.82        # terminal background opacity (KWin blurs behind it)
+blur        = 32
+
+# Syntax colours, the same as the Frost Dark VS Code theme, so an editor in the
+# terminal and VS Code look alike. Soft, so red keeps meaning "you are here".
+[syntax]
+keyword     = "#FF4D6D"
+function    = "#FFB4C0"
+type        = "#FFD27A"
+string      = "#9EE6B4"
+number      = "#C9A7FF"
+constant    = "#FF8FA3"
+property    = "#B9C6FF"
+parameter   = "#F5C7CF"
+comment     = "#5E5E6E"
+operator    = "#B0B0BA"
+escape      = "#7AD7E0"
+heading     = "#FF4D6D"
+url         = "#8DBDFF"   # links inside Markdown
+added       = "#34C759"
+deleted     = "#FF5C5C"
+changed     = "#FFB02E"
+
+# The 16 terminal colours. ANSI red is the Frost red, so any app that only
+# knows "red" still gets exactly #F21D43 in kitty and Konsole.
+[ansi]
+black          = "#1a1a1f"
+red            = "#F21D43"
+green          = "#4ade80"
+yellow         = "#fbbf24"
+blue           = "#60a5fa"
+magenta        = "#f472b6"
+cyan           = "#5eead4"
+white          = "#d4d4dc"
+bright_black   = "#4a4a55"
+bright_red     = "#ff5c78"
+bright_green   = "#86efac"
+bright_yellow  = "#fde68a"
+bright_blue    = "#93c5fd"
+bright_magenta = "#f9a8d4"
+bright_cyan    = "#99f6e4"
+bright_white   = "#ffffff"
