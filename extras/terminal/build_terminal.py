@@ -92,13 +92,15 @@ def konsole():
         out.append(entry(f"Color{i}Faint", mix(ANSI[i], P.obsidian, 0.4)) + "\n")
         out.append(entry(f"Color{i}Intense", ANSI[i + 8]) + "\n")
     out.append(entry("Foreground", P.text) + "\n" + entry("ForegroundFaint", P.muted) + "\n" + entry("ForegroundIntense", P.bright) + "\n")
+    # Solid obsidian: on this Plasma/Kvantum setup Konsole's own translucency
+    # blends with white instead of the desktop (kitty's glass is unaffected).
     out.append(f"""[General]
 Anchor=0.5,0.5
-Blur=true
+Blur=false
 ColorRandomization=false
 Description=Frost
 FillStyle=Crop
-Opacity={P.opacity}
+Opacity=1
 Wallpaper=
 WallpaperFlipType=NoFlip
 WallpaperOpacity=1
@@ -692,6 +694,8 @@ count_cut      = {st(S.bright, S.red)}
 count_selected = {st(S.obsidian, S.warn)}
 border_symbol = "│"
 border_style  = {st(S.line)}
+# code previews in the same colours as bat (install.sh puts Frost.tmTheme there)
+syntect_theme = "~/.config/bat/themes/Frost.tmTheme"
 
 [indicator]
 parent  = {st(S.bright, S.raised)}
@@ -719,6 +723,12 @@ perm_sep   = {st(S.dim)}
 progress_label  = {st(S.bright, bold=True)}
 progress_normal = {st(S.red, S.raised)}
 progress_error  = {st(S.error, S.raised)}
+
+[icon]
+# folder icons in Frost red, like the folder names (yazi's default is blue)
+prepend_conds = [
+  {{ if = "dir", text = "\\uf07b", fg = "{S.red}" }},
+]
 
 [filetype]
 rules = [
